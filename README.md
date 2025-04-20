@@ -1,6 +1,7 @@
 # PosterLens
 
 ![PosterLens Logo](Screenshots/app_logo.png)
+![Uploading appicon.png…]()
 
 ## Perplexity Hackathon 2025 Submission
 
