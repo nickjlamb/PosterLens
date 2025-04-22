@@ -3,6 +3,9 @@ import SwiftUI
 struct ScanCardView: View {
     let scan: PosterScan
     @State private var showingOptions = false
+    @State private var showingDeleteAlert = false
+    @State private var showingShareSheet = false
+    @EnvironmentObject private var dataStore: DataStore
     
     // Selection mode properties
     var isSelectionMode: Bool = false
@@ -52,13 +55,17 @@ struct ScanCardView: View {
             .disabled(isSelectionMode) // Disable navigation when in selection mode
             .contextMenu {
                 Button(action: {
-                    // Share action
+                    // Share action - Generate PDF and show share sheet
+                    if let pdfURLs = dataStore.exportScansAsPDF(withIDs: [scan.id]), !pdfURLs.isEmpty {
+                        showingShareSheet = true
+                    }
                 }) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
                 
                 Button(role: .destructive, action: {
-                    // Delete action
+                    // Delete action - Show confirmation alert
+                    showingDeleteAlert = true
                 }) {
                     Label("Delete", systemImage: "trash")
                 }
@@ -111,6 +118,26 @@ struct ScanCardView: View {
             if !isSelectionMode {
                 // Trigger selection mode with this item selected
                 onSelect?(true)
+            }
+        }
+        // Add alert for delete confirmation
+        .alert("Delete Scan?", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                // Delete the scan
+                dataStore.deleteScan(withID: scan.id)
+                
+                // Provide haptic feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+            }
+        } message: {
+            Text("This will permanently delete this scan. This action cannot be undone.")
+        }
+        // Add sheet for sharing
+        .sheet(isPresented: $showingShareSheet) {
+            if let pdfURLs = dataStore.exportScansAsPDF(withIDs: [scan.id]), !pdfURLs.isEmpty {
+                ShareSheet(items: pdfURLs)
             }
         }
     }

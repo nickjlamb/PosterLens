@@ -9,6 +9,13 @@ class CameraViewModel: ObservableObject {
     
     private let ocrService = OCRService()
     private let perplexityService = PerplexityService()
+    // Changed from private to public so it can be set directly
+    var dataStore: DataStore?
+    
+    // Add initializer for dependency injection
+    init(dataStore: DataStore? = nil) {
+        self.dataStore = dataStore
+    }
     
     func processImage(_ image: UIImage, hasPermission: Bool = false) {
         isLoading = true
@@ -58,18 +65,28 @@ class CameraViewModel: ObservableObject {
                     )
                     self.currentScan = newScan
                     
+                    // Always save the scan to history
+                    self.dataStore?.saveScan(newScan)
+                    
                 case .failure(let error):
                     self.showingError = true
+                    self.errorMessage = "Summary generation failed: \(error.localizedDescription)"
                     
-                    // Handle specific API key errors
-                    if case PerplexityError.missingAPIKey = error {
-                        self.errorMessage = "Perplexity API key is missing. Please add your API key in the app settings."
-                    } else if case PerplexityError.apiError(let message) = error,
-                              message.contains("authentication") || message.contains("key") {
-                        self.errorMessage = "Invalid Perplexity API key. Please check your API key in the app settings."
-                    } else {
-                        self.errorMessage = "Summary generation failed: \(error.localizedDescription)"
-                    }
+                    // Create a basic scan with just the OCR text so we don't lose the data
+                    // This allows users to at least see what was captured even if summary generation failed
+                    let title = self.ocrService.extractPosterTitle(from: text)
+                    let fallbackScan = PosterScan(
+                        title: title,
+                        rawText: text,
+                        summaryPoints: ["Unable to generate summary. Please try again later."],
+                        image: image,
+                        date: Date(),
+                        hasPermission: hasPermission
+                    )
+                    self.currentScan = fallbackScan
+                    
+                    // Always save the fallback scan to history too
+                    self.dataStore?.saveScan(fallbackScan)
                 }
             }
         }

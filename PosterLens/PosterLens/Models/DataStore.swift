@@ -21,16 +21,15 @@ class DataStore: ObservableObject {
     }
     
     func saveScan(_ scan: PosterScan) {
-        // Create a copy with isSaved set to true
-        var scanToSave = scan
-        scanToSave.isSaved = true
-        
         // Check if scan already exists (by ID)
         if let index = savedScans.firstIndex(where: { $0.id == scan.id }) {
-            savedScans[index] = scanToSave
+            savedScans[index] = scan
         } else {
-            savedScans.append(scanToSave)
+            savedScans.append(scan)
         }
+        
+        // Force a UI update by modifying the array
+        objectWillChange.send()
     }
     
     func deleteScan(at offsets: IndexSet) {
