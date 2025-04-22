@@ -7,7 +7,6 @@ struct PosterScan: Identifiable, Codable {
     let rawText: String
     let summaryPoints: [String]
     let date: Date
-    var isSaved: Bool
     var authorQuestions: [String]?
     var hasPermission: Bool
     
@@ -25,14 +24,13 @@ struct PosterScan: Identifiable, Codable {
         return formatter.string(from: date)
     }
     
-    init(title: String, rawText: String, summaryPoints: [String], image: UIImage?, date: Date, isSaved: Bool = false, authorQuestions: [String]? = nil, hasPermission: Bool = false) {
+    init(title: String, rawText: String, summaryPoints: [String], image: UIImage?, date: Date, authorQuestions: [String]? = nil, hasPermission: Bool = false) {
         self.id = UUID()
         self.title = title
         self.rawText = rawText
         self.summaryPoints = summaryPoints
         self.image = image
         self.date = date
-        self.isSaved = isSaved
         self.authorQuestions = authorQuestions
         self.hasPermission = hasPermission
         
@@ -44,7 +42,7 @@ struct PosterScan: Identifiable, Codable {
     
     // Custom Codable implementation to handle UIImage
     enum CodingKeys: String, CodingKey {
-        case id, title, rawText, summaryPoints, date, isSaved, imageData, authorQuestions, hasPermission
+        case id, title, rawText, summaryPoints, date, imageData, authorQuestions, hasPermission
     }
     
     init(from decoder: Decoder) throws {
@@ -54,7 +52,6 @@ struct PosterScan: Identifiable, Codable {
         rawText = try container.decode(String.self, forKey: .rawText)
         summaryPoints = try container.decode([String].self, forKey: .summaryPoints)
         date = try container.decode(Date.self, forKey: .date)
-        isSaved = try container.decode(Bool.self, forKey: .isSaved)
         authorQuestions = try container.decodeIfPresent([String].self, forKey: .authorQuestions)
         imageData = try container.decodeIfPresent(Data.self, forKey: .imageData)
         hasPermission = try container.decodeIfPresent(Bool.self, forKey: .hasPermission) ?? false
@@ -72,7 +69,6 @@ struct PosterScan: Identifiable, Codable {
         try container.encode(rawText, forKey: .rawText)
         try container.encode(summaryPoints, forKey: .summaryPoints)
         try container.encode(date, forKey: .date)
-        try container.encode(isSaved, forKey: .isSaved)
         try container.encodeIfPresent(authorQuestions, forKey: .authorQuestions)
         try container.encodeIfPresent(imageData, forKey: .imageData)
         try container.encode(hasPermission, forKey: .hasPermission)
@@ -86,7 +82,6 @@ struct PosterScan: Identifiable, Codable {
             summaryPoints: self.summaryPoints,
             image: self.image,
             date: self.date,
-            isSaved: self.isSaved,
             authorQuestions: questions,
             hasPermission: self.hasPermission
         )

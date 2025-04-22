@@ -1,70 +1,69 @@
 import Foundation
 
-enum PerplexityError: Error {
+// Make PerplexityError conform to LocalizedError for better error messages
+enum PerplexityError: Error, LocalizedError {
     case invalidURL
-    case requestFailed
+    case requestFailed(String)
     case invalidResponse
     case apiError(String)
     case missingAPIKey
+    case unknownError
     
-    var localizedDescription: String {
+    var errorDescription: String? {
         switch self {
         case .invalidURL:
             return "Invalid API URL"
-        case .requestFailed:
-            return "API request failed"
+        case .requestFailed(let message):
+            return "API request failed: \(message)"
         case .invalidResponse:
             return "Invalid response from API"
         case .apiError(let message):
             return "API error: \(message)"
         case .missingAPIKey:
             return "Perplexity API key is missing"
+        case .unknownError:
+            return "An unknown error occurred"
         }
     }
 }
 
 class PerplexityService {
-    private let apiKey: String
+    // Hardcoded API key provided by the user
+    private let defaultAPIKey = "***REMOVED***"
+    private var apiKey: String
     private let baseURL = "https://api.perplexity.ai/chat/completions"
     
     // Initialize with API key from environment or configuration
     init(apiKey: String? = nil) {
-        // Use provided key, or check environment, or use a default placeholder
+        // Always use the default API key first
+        self.apiKey = defaultAPIKey
+        
+        // If a specific key is provided, use that instead
         if let providedKey = apiKey, !providedKey.isEmpty {
             self.apiKey = providedKey
-        } else if let envKey = ProcessInfo.processInfo.environment["PERPLEXITY_API_KEY"], !envKey.isEmpty {
-            self.apiKey = envKey
-        } else if let storedKey = UserDefaults.standard.string(forKey: "PerplexityAPIKey"), !storedKey.isEmpty {
-            self.apiKey = storedKey
-        } else {
-            // In a real app, we would handle this more gracefully
-            self.apiKey = "YOUR_API_KEY_HERE" // Placeholder that will trigger an error
         }
-        
-        // Print debug info
-        print("DEBUG: PerplexityService initialized with API key length: \(self.apiKey.count)")
     }
     
-    // Set API key (for use when user provides it later)
+    // Check if API key is valid
+    var hasValidAPIKey: Bool {
+        return !apiKey.isEmpty && apiKey != "YOUR_API_KEY_HERE"
+    }
+    
+    // Set API key (for internal use only, not exposed to users)
     func setAPIKey(_ key: String) {
+        apiKey = key
         UserDefaults.standard.set(key, forKey: "PerplexityAPIKey")
     }
     
     // Main method to generate summary from scientific poster text
     func generateSummary(from text: String, completion: @escaping (Result<[String], Error>) -> Void) {
         // Validate API key
-        if apiKey == "YOUR_API_KEY_HERE" {
-            print("DEBUG: API key validation failed - using placeholder key")
+        if !hasValidAPIKey {
             completion(.failure(PerplexityError.missingAPIKey))
             return
         }
         
-        // Ensure the URL is properly formatted
-        let urlString = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("DEBUG: Using API URL: \(urlString)")
-        
-        guard let url = URL(string: urlString) else {
-            print("DEBUG: Failed to create URL from string: \(urlString)")
+        guard let url = URL(string: baseURL) else {
             completion(.failure(PerplexityError.invalidURL))
             return
         }
@@ -78,9 +77,9 @@ class PerplexityService {
         // Prepare the prompt with scientific context
         let prompt = createScientificPosterPrompt(text: text)
         
-        // Create the request body with the correct model name
+        // Create the request body
         let requestBody: [String: Any] = [
-            "model": "sonar", // Using the correct Perplexity AI model
+            "model": "sonar", // Using sonar model as requested by the user
             "messages": [
                 ["role": "system", "content": "You are a scientific assistant that specializes in summarizing scientific posters into clear, concise bullet points. Focus on extracting key findings, methodology, and conclusions."],
                 ["role": "user", "content": prompt]
@@ -91,44 +90,35 @@ class PerplexityService {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-            print("DEBUG: Request body created successfully")
         } catch {
-            print("DEBUG: Failed to create request body: \(error.localizedDescription)")
-            completion(.failure(error))
+            let errorMessage = "Failed to serialize request: \(error.localizedDescription)"
+            completion(.failure(PerplexityError.requestFailed(errorMessage)))
             return
         }
-        
-        print("DEBUG: Starting API request to Perplexity")
         
         // Create and start the data task
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
-                print("DEBUG: API request failed with error: \(error.localizedDescription)")
-                completion(.failure(error))
+                let errorMessage = "Network error: \(error.localizedDescription)"
+                completion(.failure(PerplexityError.requestFailed(errorMessage)))
                 return
             }
             
-            if let httpResponse = response as? HTTPURLResponse {
-                print("DEBUG: API response status code: \(httpResponse.statusCode)")
-            }
-            
             guard let data = data else {
-                print("DEBUG: No data received from API")
                 completion(.failure(PerplexityError.invalidResponse))
                 return
             }
             
-            print("DEBUG: Received \(data.count) bytes from API")
+            // For debugging, print the raw response
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("API Response: \(responseString)")
+            }
             
             do {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    // Print the response for debugging
-                    print("DEBUG: API response keys: \(json.keys.joined(separator: ", "))")
-                    
                     // Check for API errors first
                     if let errorInfo = json["error"] as? [String: Any],
                        let message = errorInfo["message"] as? String {
-                        print("DEBUG: API returned error: \(message)")
                         completion(.failure(PerplexityError.apiError(message)))
                         return
                     }
@@ -139,45 +129,39 @@ class PerplexityService {
                        let message = firstChoice["message"] as? [String: Any],
                        let content = message["content"] as? String {
                         
-                        print("DEBUG: Successfully extracted content from API response")
-                        
                         // Process the content into bullet points
                         let bulletPoints = self.processBulletPoints(from: content)
-                        print("DEBUG: Processed \(bulletPoints.count) bullet points")
-                        completion(.success(bulletPoints))
+                        
+                        // Ensure we have at least one bullet point
+                        if bulletPoints.isEmpty {
+                            completion(.failure(PerplexityError.apiError("No valid bullet points found in response")))
+                        } else {
+                            completion(.success(bulletPoints))
+                        }
                     } else {
-                        print("DEBUG: Failed to extract content from API response")
                         completion(.failure(PerplexityError.invalidResponse))
                     }
                 } else {
-                    print("DEBUG: Failed to parse API response as JSON")
                     completion(.failure(PerplexityError.invalidResponse))
                 }
             } catch {
-                print("DEBUG: JSON parsing error: \(error.localizedDescription)")
-                completion(.failure(error))
+                let errorMessage = "JSON parsing error: \(error.localizedDescription)"
+                completion(.failure(PerplexityError.requestFailed(errorMessage)))
             }
         }
         
         task.resume()
-        print("DEBUG: API request task started")
     }
     
     // Method to generate questions to ask the poster author
     func generateAuthorQuestions(from summary: [String], rawText: String, completion: @escaping (Result<[String], Error>) -> Void) {
         // Validate API key
-        if apiKey == "YOUR_API_KEY_HERE" {
-            print("DEBUG: API key validation failed - using placeholder key")
+        if !hasValidAPIKey {
             completion(.failure(PerplexityError.missingAPIKey))
             return
         }
         
-        // Ensure the URL is properly formatted
-        let urlString = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("DEBUG: Using API URL: \(urlString)")
-        
-        guard let url = URL(string: urlString) else {
-            print("DEBUG: Failed to create URL from string: \(urlString)")
+        guard let url = URL(string: baseURL) else {
             completion(.failure(PerplexityError.invalidURL))
             return
         }
@@ -191,9 +175,9 @@ class PerplexityService {
         // Prepare the prompt for generating questions
         let prompt = createAuthorQuestionsPrompt(summary: summary, rawText: rawText)
         
-        // Create the request body with the correct model name
+        // Create the request body
         let requestBody: [String: Any] = [
-            "model": "sonar", // Using the correct Perplexity AI model
+            "model": "sonar", // Using sonar model as requested by the user
             "messages": [
                 ["role": "system", "content": "You are a scientific assistant that specializes in generating insightful questions about scientific research. Your questions should help researchers think critically about their work and consider future implications."],
                 ["role": "user", "content": prompt]
@@ -204,44 +188,35 @@ class PerplexityService {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-            print("DEBUG: Request body created successfully")
         } catch {
-            print("DEBUG: Failed to create request body: \(error.localizedDescription)")
-            completion(.failure(error))
+            let errorMessage = "Failed to serialize request: \(error.localizedDescription)"
+            completion(.failure(PerplexityError.requestFailed(errorMessage)))
             return
         }
-        
-        print("DEBUG: Starting API request to Perplexity for questions")
         
         // Create and start the data task
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
-                print("DEBUG: API request failed with error: \(error.localizedDescription)")
-                completion(.failure(error))
+                let errorMessage = "Network error: \(error.localizedDescription)"
+                completion(.failure(PerplexityError.requestFailed(errorMessage)))
                 return
             }
             
-            if let httpResponse = response as? HTTPURLResponse {
-                print("DEBUG: API response status code: \(httpResponse.statusCode)")
-            }
-            
             guard let data = data else {
-                print("DEBUG: No data received from API")
                 completion(.failure(PerplexityError.invalidResponse))
                 return
             }
             
-            print("DEBUG: Received \(data.count) bytes from API")
+            // For debugging, print the raw response
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("API Response: \(responseString)")
+            }
             
             do {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    // Print the response for debugging
-                    print("DEBUG: API response keys: \(json.keys.joined(separator: ", "))")
-                    
                     // Check for API errors first
                     if let errorInfo = json["error"] as? [String: Any],
                        let message = errorInfo["message"] as? String {
-                        print("DEBUG: API returned error: \(message)")
                         completion(.failure(PerplexityError.apiError(message)))
                         return
                     }
@@ -252,28 +227,28 @@ class PerplexityService {
                        let message = firstChoice["message"] as? [String: Any],
                        let content = message["content"] as? String {
                         
-                        print("DEBUG: Successfully extracted content from API response")
-                        
                         // Process the content into questions
                         let questions = self.processQuestions(from: content)
-                        print("DEBUG: Processed \(questions.count) questions")
-                        completion(.success(questions))
+                        
+                        // Ensure we have at least one question
+                        if questions.isEmpty {
+                            completion(.failure(PerplexityError.apiError("No valid questions found in response")))
+                        } else {
+                            completion(.success(questions))
+                        }
                     } else {
-                        print("DEBUG: Failed to extract content from API response")
                         completion(.failure(PerplexityError.invalidResponse))
                     }
                 } else {
-                    print("DEBUG: Failed to parse API response as JSON")
                     completion(.failure(PerplexityError.invalidResponse))
                 }
             } catch {
-                print("DEBUG: JSON parsing error: \(error.localizedDescription)")
-                completion(.failure(error))
+                let errorMessage = "JSON parsing error: \(error.localizedDescription)"
+                completion(.failure(PerplexityError.requestFailed(errorMessage)))
             }
         }
         
         task.resume()
-        print("DEBUG: API request task started for questions")
     }
     
     // Create a specialized prompt for scientific poster summarization
@@ -433,28 +408,5 @@ class PerplexityService {
         }
         
         return questions
-    }
-    
-    // Method to check if API key is valid
-    func validateAPIKey(completion: @escaping (Bool) -> Void) {
-        // Simple validation request to check if the API key works
-        let testPrompt = "Test API key validation"
-        
-        generateSummary(from: testPrompt) { result in
-            switch result {
-            case .success(_):
-                completion(true)
-            case .failure(let error):
-                if case PerplexityError.apiError(let message) = error,
-                   message.contains("authentication") || message.contains("invalid") || message.contains("key") {
-                    completion(false)
-                } else if case PerplexityError.missingAPIKey = error {
-                    completion(false)
-                } else {
-                    // Other errors might not be related to the API key
-                    completion(true)
-                }
-            }
-        }
     }
 }

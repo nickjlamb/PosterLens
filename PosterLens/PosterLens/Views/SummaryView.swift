@@ -33,16 +33,15 @@ struct SummaryCardView: View {
 struct SummaryView: View {
     let scan: PosterScan
     @EnvironmentObject private var dataStore: DataStore
-    @State private var isSaved: Bool
     @State private var isGeneratingQuestions = false
     @State private var showingQuestions = false
     @State private var questions: [String]?
     @State private var showingError = false
     @State private var errorMessage = ""
+    @State private var scanSaved = false
     
     init(scan: PosterScan) {
         self.scan = scan
-        _isSaved = State(initialValue: scan.isSaved)
         _questions = State(initialValue: scan.authorQuestions)
         _showingQuestions = State(initialValue: scan.authorQuestions != nil)
     }
@@ -167,34 +166,27 @@ struct SummaryView: View {
         }
         .navigationTitle("Poster Summary")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            Button(action: {
-                if isSaved {
-                    // Already saved, do nothing
-                } else {
-                    // If we have generated questions, save them with the scan
-                    if let questions = questions {
-                        let updatedScan = scan.withQuestions(questions)
-                        dataStore.saveScan(updatedScan)
-                    } else {
-                        dataStore.saveScan(scan)
-                    }
-                    isSaved = true
-                }
-            }) {
-                Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-            }
-        }
         .alert("Error", isPresented: $showingError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
+        .onAppear {
+            // Always save the scan to history when the view appears
+            if !scanSaved {
+                dataStore.saveScan(scan)
+                scanSaved = true
+            }
+        }
     }
     
-    // Process summary points to extract headings and content
+    // Process summary points to extract headings and content with deduplication
     private func processedSummaryPoints() -> [(title: String, content: String)] {
-        return scan.summaryPoints.compactMap { point in
+        // First, deduplicate summary points based on content
+        var uniquePoints = [String: String]() // content: title
+        var result = [(title: String, content: String)]()
+        
+        for (index, point) in scan.summaryPoints.enumerated() {
             // Check if the point contains a heading (text between ** markers)
             if let range = point.range(of: "\\*\\*(.*?)\\*\\*", options: .regularExpression) {
                 let heading = String(point[range])
@@ -207,12 +199,26 @@ struct SummaryView: View {
                     .replacingOccurrences(of: ":", with: "", options: .anchored)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 
-                return (title: heading, content: content)
+                // Only add if this content hasn't been seen before
+                if uniquePoints[content] == nil {
+                    uniquePoints[content] = heading
+                    result.append((title: heading, content: content))
+                }
             } else {
-                // If no heading is found, use the entire point as content with a generic title
-                return (title: "Key Point", content: point)
+                // If no heading is found, use a more specific title
+                let content = point.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Only add if this content hasn't been seen before
+                if uniquePoints[content] == nil {
+                    // Generate a more specific title based on content
+                    let title = "Key Point \(index + 1)"
+                    uniquePoints[content] = title
+                    result.append((title: title, content: content))
+                }
             }
         }
+        
+        return result
     }
     
     // Process questions to extract headings and content
@@ -251,11 +257,9 @@ struct SummaryView: View {
                     self.questions = generatedQuestions
                     self.showingQuestions = true
                     
-                    // If the scan is already saved, update it with the new questions
-                    if isSaved {
-                        let updatedScan = scan.withQuestions(generatedQuestions)
-                        dataStore.saveScan(updatedScan)
-                    }
+                    // Update the scan with the new questions
+                    let updatedScan = scan.withQuestions(generatedQuestions)
+                    dataStore.saveScan(updatedScan)
                     
                 case .failure(let error):
                     self.errorMessage = "Failed to generate questions: \(error.localizedDescription)"
