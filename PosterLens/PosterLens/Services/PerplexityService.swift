@@ -79,7 +79,7 @@ class PerplexityService {
         
         // Create the request body
         let requestBody: [String: Any] = [
-            "model": "sonar", // Using sonar model as requested by the user
+            "model": "sonar-pro", // Using Sonar Pro model for higher quality responses
             "messages": [
                 ["role": "system", "content": "You are a scientific assistant that specializes in summarizing scientific posters into clear, concise bullet points. Focus on extracting key findings, methodology, and conclusions."],
                 ["role": "user", "content": prompt]
@@ -177,7 +177,7 @@ class PerplexityService {
         
         // Create the request body
         let requestBody: [String: Any] = [
-            "model": "sonar", // Using sonar model as requested by the user
+            "model": "sonar-pro", // Using Sonar Pro model for higher quality responses
             "messages": [
                 ["role": "system", "content": "You are a scientific assistant that specializes in generating insightful questions about scientific research. Your questions should help researchers think critically about their work and consider future implications."],
                 ["role": "user", "content": prompt]
