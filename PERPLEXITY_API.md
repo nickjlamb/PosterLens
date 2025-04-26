@@ -4,7 +4,7 @@ This document provides detailed information about how PosterLens integrates with
 
 ## Overview
 
-PosterLens uses the Perplexity Sonar API to transform raw text extracted from scientific posters into structured, easy-to-understand summaries and generate insightful questions for poster authors. This integration enables users to quickly grasp complex scientific content and engage more meaningfully with researchers.
+PosterLens uses the Perplexity Sonar Pro API to transform raw text extracted from scientific posters into structured, easy-to-understand summaries and generate insightful questions for poster authors. This integration enables users to quickly grasp complex scientific content and engage more meaningfully with researchers.
 
 ## API Implementation
 
@@ -20,7 +20,7 @@ The integration is implemented in the `PerplexityService.swift` file, which hand
 2. **Request Construction**
    - Prompt engineering for optimal results
    - Context formatting from extracted poster text
-   - Model selection (using Sonar model)
+   - Model selection (using Sonar Pro model)
 
 3. **Response Handling**
    - JSON parsing
@@ -70,9 +70,9 @@ func generateSummary(from text: String, completion: @escaping (Result<[String], 
     
     // API request configuration
     let parameters: [String: Any] = [
-        "model": "sonar",
+        "model": "sonar-pro",
         "messages": [
-            ["role": "system", "content": "You are a scientific research assistant who helps summarize scientific posters."],
+            ["role": "system", "content": "You are a scientific assistant that specializes in summarizing scientific posters into clear, concise bullet points. Focus on extracting key findings, methodology, and conclusions."],
             ["role": "user", "content": prompt]
         ],
         "temperature": 0.2,
