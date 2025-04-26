@@ -3,37 +3,46 @@ import Combine
 
 /// Manages the onboarding experience for the PosterLens app
 class OnboardingManager: ObservableObject {
-    // Master switch to enable/disable the entire onboarding system
-    let onboardingEnabled = false  // Set to false to disable all onboarding features
+    // Enable onboarding by default
+    let onboardingEnabled = true
     
     // Published properties to control hint visibility
     @Published var showCameraHint = false
     @Published var showPermissionHint = false
     @Published var showHistoryHint = false
     
+    // Published property to track if onboarding has been completed
+    @Published var hasCompletedOnboarding: Bool
+    
     // Key for UserDefaults to track if user has completed onboarding
     private let onboardingCompletedKey = "onboardingCompleted"
     
+    // Track if first launch sequence has been shown
+    @Published var showOnboarding: Bool = false
+    
     init() {
-        // If onboarding is disabled, don't show any hints
+        // Check if this is the first launch
+        self.hasCompletedOnboarding = UserDefaults.standard.bool(forKey: onboardingCompletedKey)
+        
+        // If onboarding is disabled, don't show any onboarding
         if !onboardingEnabled {
             showCameraHint = false
             showPermissionHint = false
             showHistoryHint = false
+            hasCompletedOnboarding = true
             return
         }
         
-        // Check if this is the first launch
-        let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: onboardingCompletedKey)
+        // Prepare to show onboarding if not completed
+        showOnboarding = !hasCompletedOnboarding
         
         if !hasCompletedOnboarding {
-            // Show camera hint immediately on first launch
-            showCameraHint = true
+            // Initialize in-app hints for later
+            showCameraHint = false
             
-            // Schedule other hints to appear sequentially
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-                self?.showCameraHint = false
-            }
+            // These will be triggered at appropriate moments
+            showPermissionHint = false
+            showHistoryHint = false
         }
     }
     
@@ -89,13 +98,26 @@ class OnboardingManager: ObservableObject {
         }
     }
     
+    /// Mark onboarding as completed
+    func completeOnboarding() {
+        hasCompletedOnboarding = true
+        UserDefaults.standard.set(true, forKey: onboardingCompletedKey)
+        
+        // Reset the other hints
+        showCameraHint = false
+        showPermissionHint = false
+        showHistoryHint = false
+    }
+    
     /// Resets onboarding status (for testing)
     func resetOnboarding() {
         // Skip if onboarding is disabled
         if !onboardingEnabled { return }
         
+        hasCompletedOnboarding = false
         UserDefaults.standard.set(false, forKey: onboardingCompletedKey)
-        showCameraHint = true
+        showOnboarding = true
+        showCameraHint = false
     }
     
     /// Types of hints available in the app
