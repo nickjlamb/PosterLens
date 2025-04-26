@@ -2,7 +2,7 @@
 
 ## Perplexity Hackathon 2025 Submission
 
-PosterLens is an iOS application that uses computer vision and the Perplexity API to transform scientific posters into easy-to-understand summaries and generate insightful questions for poster authors.
+PosterLens is an iOS application that uses computer vision and the Perplexity Sonar Pro API to transform scientific posters into easy-to-understand summaries and generate insightful questions for poster authors.
 
 ## 🌟 Features
 
@@ -10,13 +10,14 @@ PosterLens is an iOS application that uses computer vision and the Perplexity AP
 - **Text Extraction**: Automatically extract text content from poster images
 - **AI-Powered Summaries**: Generate structured summaries of poster content using Perplexity API
 - **Author Questions**: Create thoughtful questions to ask poster presenters
+- **Future Directions**: App suggests new research studies 
 - **History Management**: Save, organize, and revisit your scanned posters
 - **PDF Export**: Export your scans and summaries as professionally formatted PDFs
 - **Selection UI**: Select multiple scans for batch operations
 
 ## 🧠 Perplexity API Integration
 
-PosterLens leverages the Perplexity Sonar API to:
+PosterLens leverages the Perplexity Sonar Pro API to:
 
 1. **Transform raw text** extracted from scientific posters into structured, easy-to-understand summaries
 2. **Generate insightful questions** for poster authors based on the content
