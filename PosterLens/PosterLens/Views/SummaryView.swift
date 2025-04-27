@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct SummaryCardView: View {
     let title: String
@@ -143,6 +144,9 @@ struct SummaryView: View {
                         .fill(Color(.systemGray6))
                 )
                 .padding(.vertical, 8)
+                
+                // Add ButtonRowView for the three interactive buttons
+                ButtonRowView(scan: scan)
                 
                 if !scan.rawText.isEmpty {
                     DisclosureGroup {
