@@ -1,0 +1,271 @@
+import SwiftUI
+
+struct ContextButton: View {
+    let title: String
+    let iconName: String
+    let action: () -> Void
+    let gradient: LinearGradient
+    
+    init(title: String, iconName: String, action: @escaping () -> Void) {
+        self.title = title
+        self.iconName = iconName
+        self.action = action
+        
+        // Use different gradients based on button title
+        switch title {
+        case "What to Ask":
+            self.gradient = LinearGradient(
+                colors: [Color.purple, Color.purple.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case "Where it's Heading":
+            self.gradient = LinearGradient(
+                colors: [Color.blue, Color.blue.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case "What to Read Next":
+            self.gradient = LinearGradient(
+                colors: [Color.indigo, Color.indigo.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        default:
+            self.gradient = LinearGradient(
+                colors: [Color.blue, Color.blue.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 12) {
+                // Icon in a gradient circle
+                ZStack {
+                    Circle()
+                        .fill(gradient)
+                        .frame(width: 60, height: 60)
+                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                    
+                    Image(systemName: iconName)
+                        .font(.system(size: 24))
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                }
+                
+                // Title text
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.primary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
+            )
+        }
+        .buttonStyle(ScaleButtonStyle())
+    }
+}
+
+struct ButtonRowView: View {
+    let scan: PosterScan
+    @State var showQuestionsView: Bool = false
+    @State var showDirectionsView: Bool = false
+    @State var showLiteratureView: Bool = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Explore Further")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            HStack(spacing: 12) {
+                ContextButton(
+                    title: "What to Ask",
+                    iconName: "questionmark.circle",
+                    action: { showQuestionsView = true }
+                )
+                
+                ContextButton(
+                    title: "Where it's Heading",
+                    iconName: "arrow.up.forward.circle",
+                    action: { showDirectionsView = true }
+                )
+                
+                ContextButton(
+                    title: "What to Read Next",
+                    iconName: "book.fill",
+                    action: { showLiteratureView = true }
+                )
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemGray6))
+                .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
+        )
+        .padding(.vertical, 8)
+        .sheet(isPresented: $showQuestionsView) {
+            NavigationView {
+                if let questions = scan.authorQuestions {
+                    QuestionListView(questions: questions)
+                        .navigationTitle("Questions to Ask")
+                        .navigationBarTitleDisplayMode(.inline)
+                } else {
+                    Text("No questions available. Generate questions from the summary view first.")
+                        .padding()
+                        .multilineTextAlignment(.center)
+                        .navigationTitle("Questions to Ask")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
+        .sheet(isPresented: $showDirectionsView) {
+            NavigationView {
+                if let directions = scan.researchContext?.futureDirections {
+                    ResearchContextView(
+                        futureDirections: .constant(directions),
+                        onGenerateDirections: {}
+                    )
+                    .navigationTitle("Research Directions")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .padding()
+                } else {
+                    Text("No research directions available yet. Generate them from the summary view first.")
+                        .padding()
+                        .multilineTextAlignment(.center)
+                        .navigationTitle("Research Directions")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
+        .sheet(isPresented: $showLiteratureView) {
+            NavigationView {
+                if let citations = scan.researchContext?.literatureContext {
+                    LiteratureContextView(
+                        citations: .constant(citations),
+                        onGenerateCitations: {}
+                    )
+                    .navigationTitle("Literature Context")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .padding()
+                } else {
+                    Text("No literature context available yet. Generate it from the summary view first.")
+                        .padding()
+                        .multilineTextAlignment(.center)
+                        .navigationTitle("Literature Context")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
+    }
+}
+
+struct QuestionListView: View {
+    let questions: [String]
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(Array(processedQuestions().enumerated()), id: \.element.content) { index, processedQuestion in
+                    HStack(alignment: .top, spacing: 12) {
+                        Text("\(index + 1)")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Color.purple))
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            if !processedQuestion.title.isEmpty {
+                                Text(processedQuestion.title)
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            Text(processedQuestion.content)
+                                .font(.subheadline)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding()
+        }
+    }
+    
+    // Process questions to extract headings and content
+    private func processedQuestions() -> [(title: String, content: String)] {
+        return questions.map { question in
+            // Check if the question contains a heading (text between ** markers)
+            if let range = question.range(of: "\\*\\*(.*?)\\*\\*", options: .regularExpression) {
+                let heading = String(question[range])
+                    .replacingOccurrences(of: "**", with: "")
+                
+                // Get the content after the heading
+                let startIndex = question.index(range.upperBound, offsetBy: 0)
+                let content = String(question[startIndex...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: ":", with: "", options: .anchored)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                return (title: heading, content: content)
+            } else {
+                // If no heading is found, use the entire question as content with no title
+                return (title: "", content: question)
+            }
+        }
+    }
+}
+
+struct ButtonRowView_Previews: PreviewProvider {
+    static var previews: some View {
+        ButtonRowView(scan: PosterScan(
+            title: "Example Poster",
+            rawText: "This is the raw text of the poster.",
+            summaryPoints: [
+                "**Main Research Question/Objective**: The poster focuses on the importance of molecular pathology in oncology.",
+                "**Methodology Used**: The methodology involves various testing modalities such as Next-Generation Sequencing.",
+                "**Key Results and Findings**: Key findings highlight the role of biomarkers in guiding therapy.",
+                "**Main Conclusions and Implications**: The conclusions emphasize the importance of integrating molecular testing."
+            ],
+            image: nil,
+            date: Date(),
+            authorQuestions: [
+                "**Limitations**: What are the limitations of this approach?",
+                "**Future Work**: How do you plan to extend this research?"
+            ],
+            researchContext: ResearchContext(
+                futureDirections: [
+                    "**Integration with Clinical Data**: Future work should focus on integrating molecular findings with clinical data."
+                ],
+                literatureContext: [
+                    Citation(
+                        title: "The Role of Molecular Pathology in Cancer Diagnosis",
+                        authors: ["Smith J", "Johnson A"],
+                        journal: "Journal of Oncology",
+                        year: 2022,
+                        doi: "10.1000/xyz123",
+                        url: "https://example.com",
+                        abstract: "This review discusses the importance of molecular pathology in cancer diagnosis and treatment planning.",
+                        relevance: "Directly related to the poster's focus on molecular pathology in oncology."
+                    )
+                ]
+            )
+        ))
+        .padding()
+        .previewLayout(.sizeThatFits)
+    }
+}
