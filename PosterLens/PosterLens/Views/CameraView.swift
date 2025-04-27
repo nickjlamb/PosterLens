@@ -43,14 +43,14 @@ struct CameraPreviewViewControllerRepresentable: UIViewControllerRepresentable {
 struct CameraView: View {
     @EnvironmentObject private var dataStore: DataStore
     @StateObject private var viewModel = CameraViewModel()
-    @StateObject private var onboardingManager = OnboardingManager()
+    @EnvironmentObject private var onboardingManager: OnboardingManager
     @State private var showingScanner = false
     @State private var showingResults = false
     @State private var hasPermission = false
     @State private var animateScanning = false
     @State private var offsetY: CGFloat = 50
     @State private var opacity: Double = 0
-    @Environment(\.colorScheme) private var colorScheme
+    @State private var showingAboutView = false
     
     // Animation properties
     @State private var pulseScale: CGFloat = 1.0
@@ -60,8 +60,9 @@ struct CameraView: View {
     // State to force refresh of recent scans
     @State private var refreshID = UUID()
     
+    // Gradient for background and elements
     private let gradient = LinearGradient(
-        colors: [Color.blue.opacity(0.7), Color.purple.opacity(0.7)],
+        colors: [Color.blue, Color.blue.opacity(0.6)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -69,16 +70,9 @@ struct CameraView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background with subtle gradient
-                LinearGradient(
-                    colors: [
-                        colorScheme == .dark ? Color.black : Color.white,
-                        colorScheme == .dark ? Color.black : Color(UIColor.systemGray6)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                // Blue gradient background
+                gradient
+                    .ignoresSafeArea()
                 
                 if viewModel.isLoading {
                     loadingView
@@ -86,29 +80,34 @@ struct CameraView: View {
                     mainCameraView
                 }
             }
-            // Hide the default navigation title
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    // Empty view to hide the default title
-                    Color.clear
-                        .frame(width: 0, height: 0)
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingAboutView = true
+                    }) {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.white)
+                            .font(.system(size: 20))
+                            .padding(8)
+                    }
+                    .buttonPressAnimation()
                 }
             }
             .overlay(alignment: .top) {
                 // Custom header with more space and larger font
                 VStack(spacing: 4) {
-                    Spacer().frame(height: 20) // Add space at the top
+                    Spacer().frame(height: 10)
                     
                     Text("PosterLens")
                         .font(.title.bold())
-                        .foregroundColor(Color.blue)
+                        .foregroundColor(.white)
                     
                     Text("Your AI Scientific Conference Companion")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.8))
                     
-                    Spacer().frame(height: 16) // Add space below
+                    Spacer().frame(height: 16)
                 }
                 .padding(.top, 10)
             }
@@ -135,6 +134,10 @@ struct CameraView: View {
                 // Force refresh of recent scans
                 refreshID = UUID()
             }
+            .sheet(isPresented: $showingAboutView) {
+                AboutView()
+                    .environmentObject(onboardingManager)
+            }
         }
     }
     
@@ -143,12 +146,12 @@ struct CameraView: View {
         VStack(spacing: 30) {
             Text("Analyzing Poster")
                 .font(.title2.bold())
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
             
             ZStack {
                 // Pulsing circle background
                 Circle()
-                    .fill(Color.blue.opacity(0.2))
+                    .fill(Color.white.opacity(0.2))
                     .frame(width: 150, height: 150)
                     .scaleEffect(pulseScale)
                     .onAppear {
@@ -160,7 +163,7 @@ struct CameraView: View {
                 // Rotating ring
                 Circle()
                     .trim(from: 0, to: 0.8)
-                    .stroke(gradient, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .stroke(Color.white, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                     .frame(width: 120, height: 120)
                     .rotationEffect(Angle(degrees: rotationAngle))
                     .onAppear {
@@ -172,15 +175,14 @@ struct CameraView: View {
                 // Processing icon
                 Image(systemName: "doc.text.magnifyingglass")
                     .font(.system(size: 36))
-                    .foregroundColor(.blue)
+                    .foregroundColor(.white)
             }
             
             Text("Extracting insights from your scientific poster...")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
-                .opacity(0.8)
         }
         .padding()
     }
@@ -277,7 +279,7 @@ struct CameraView: View {
                     Spacer()
                     Rectangle()
                         .fill(LinearGradient(
-                            gradient: Gradient(colors: [Color.clear, colorScheme == .dark ? Color.white.opacity(0.15) : Color.black.opacity(0.15)]),
+                            gradient: Gradient(colors: [Color.clear, Color.white.opacity(0.15)]),
                             startPoint: .top,
                             endPoint: .bottom
                         ))
@@ -296,6 +298,9 @@ struct CameraView: View {
     // Camera scan card with animations
     private var cameraScanCard: some View {
         Button(action: {
+            // Add haptic feedback
+            HapticManager.shared.mediumImpact()
+            
             withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
                 showMotionGraphics = true
             }
@@ -315,22 +320,20 @@ struct CameraView: View {
             ZStack {
                 // Card background with shadow
                 RoundedRectangle(cornerRadius: 24)
-                    .fill(colorScheme == .dark ?
-                          Color(UIColor.systemGray6) :
-                          Color.white)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24)
-                            .strokeBorder(gradient, lineWidth: showMotionGraphics ? 3 : 1.5)
-                    )
-                    .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
                     .scaleEffect(showMotionGraphics ? 0.96 : 1.0)
                 
                 VStack(spacing: 24) {
                     // Animated camera icon
                     ZStack {
-                        // Background circle
+                        // Background circle with gradient
                         Circle()
-                            .fill(gradient)
+                            .fill(LinearGradient(
+                                colors: [Color.purple.opacity(0.7), Color.blue.opacity(0.7)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
                             .frame(width: 100, height: 100)
                             .scaleEffect(showMotionGraphics ? 1.1 : 1.0)
                             .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
@@ -346,7 +349,7 @@ struct CameraView: View {
                             .font(.title3.bold())
                             .foregroundColor(.primary)
                         
-                        Text("Point your camera at a research poster to capture,\nanalyze, and get instant insights")
+                        Text("Point your camera at a research poster\nto capture,\nanalyze, and get instant insights")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -359,7 +362,11 @@ struct CameraView: View {
                         .foregroundColor(.white)
                         .padding(.vertical, 12)
                         .padding(.horizontal, 40)
-                        .background(gradient)
+                        .background(LinearGradient(
+                            colors: [Color.blue, Color.purple.opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ))
                         .cornerRadius(30)
                         .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
                 }
@@ -378,7 +385,7 @@ struct CameraView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Recent Scans")
                 .font(.headline)
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
                 .padding(.horizontal, 24)
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -395,7 +402,6 @@ struct CameraView: View {
                                         
                                         if isLandscape {
                                             // For landscape images, we'll center them and maintain aspect ratio
-                                            // This ensures they have the same width but might have smaller height
                                             ZStack(alignment: .topTrailing) {
                                                 Image(uiImage: image)
                                                     .resizable()
@@ -423,28 +429,29 @@ struct CameraView: View {
                                     } else {
                                         // Placeholder for missing image
                                         Rectangle()
-                                            .fill(Color.gray.opacity(0.3))
+                                            .fill(Color.white.opacity(0.3))
                                             .frame(width: 120, height: 80)
                                             .overlay(
-                                                Image(systemName: "doc.text.image")
+                                                Image(systemName: "photo")
                                                     .font(.system(size: 24))
-                                                    .foregroundColor(.gray)
+                                                    .foregroundColor(.white.opacity(0.7))
                                             )
                                     }
                                 }
                                 .cornerRadius(8)
-                                .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+                                .shadow(color: Color.black.opacity(0.2), radius: 3, x: 0, y: 2)
                                 
                                 // Title and date
                                 Text(scan.title)
                                     .font(.caption)
                                     .fontWeight(.medium)
                                     .lineLimit(1)
+                                    .foregroundColor(.white)
                                     .frame(width: 120, alignment: .leading)
                                 
                                 Text(scan.dateFormatted)
                                     .font(.caption2)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.white.opacity(0.7))
                                     .lineLimit(1)
                                     .frame(width: 120, alignment: .leading)
                             }
