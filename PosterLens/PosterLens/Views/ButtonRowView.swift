@@ -76,9 +76,21 @@ struct ContextButton: View {
 
 struct ButtonRowView: View {
     let scan: PosterScan
-    @State var showQuestionsView: Bool = false
-    @State var showDirectionsView: Bool = false
-    @State var showLiteratureView: Bool = false
+    @EnvironmentObject private var dataStore: DataStore
+    @State private var showQuestionsView: Bool = false
+    @State private var showDirectionsView: Bool = false
+    @State private var showLiteratureView: Bool = false
+    @State private var isGeneratingQuestions: Bool = false
+    @State private var isGeneratingDirections: Bool = false
+    @State private var isGeneratingLiterature: Bool = false
+    @State private var questions: [String]?
+    @State private var directions: [String]?
+    @State private var citations: [Citation]?
+    @State private var showingError: Bool = false
+    @State private var errorMessage: String = ""
+    
+    // Service for API calls
+    private let perplexityService = PerplexityService()
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -91,19 +103,70 @@ struct ButtonRowView: View {
                 ContextButton(
                     title: "What to Ask",
                     iconName: "questionmark.circle",
-                    action: { showQuestionsView = true }
+                    action: {
+                        if scan.authorQuestions != nil {
+                            showQuestionsView = true
+                        } else {
+                            generateQuestions()
+                        }
+                    }
+                )
+                .overlay(
+                    Group {
+                        if isGeneratingQuestions {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .padding(8)
+                                .background(Color(.systemBackground).opacity(0.8))
+                                .cornerRadius(8)
+                        }
+                    }
                 )
                 
                 ContextButton(
                     title: "Where it's Heading",
                     iconName: "arrow.up.forward.circle",
-                    action: { showDirectionsView = true }
+                    action: {
+                        if scan.researchContext?.futureDirections != nil {
+                            showDirectionsView = true
+                        } else {
+                            generateFutureDirections()
+                        }
+                    }
+                )
+                .overlay(
+                    Group {
+                        if isGeneratingDirections {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .padding(8)
+                                .background(Color(.systemBackground).opacity(0.8))
+                                .cornerRadius(8)
+                        }
+                    }
                 )
                 
                 ContextButton(
                     title: "What to Read Next",
                     iconName: "book.fill",
-                    action: { showLiteratureView = true }
+                    action: {
+                        if scan.researchContext?.literatureContext != nil {
+                            showLiteratureView = true
+                        } else {
+                            generateLiteratureCitations()
+                        }
+                    }
+                )
+                .overlay(
+                    Group {
+                        if isGeneratingLiterature {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .padding(8)
+                                .background(Color(.systemBackground).opacity(0.8))
+                                .cornerRadius(8)
+                        }
+                    }
                 )
             }
             .padding(.horizontal, 4)
@@ -117,12 +180,12 @@ struct ButtonRowView: View {
         .padding(.vertical, 8)
         .sheet(isPresented: $showQuestionsView) {
             NavigationView {
-                if let questions = scan.authorQuestions {
+                if let questions = scan.authorQuestions ?? self.questions {
                     QuestionListView(questions: questions)
                         .navigationTitle("Questions to Ask")
                         .navigationBarTitleDisplayMode(.inline)
                 } else {
-                    Text("No questions available. Generate questions from the summary view first.")
+                    Text("Generating questions... Please wait or try again.")
                         .padding()
                         .multilineTextAlignment(.center)
                         .navigationTitle("Questions to Ask")
@@ -132,7 +195,7 @@ struct ButtonRowView: View {
         }
         .sheet(isPresented: $showDirectionsView) {
             NavigationView {
-                if let directions = scan.researchContext?.futureDirections {
+                if let directions = scan.researchContext?.futureDirections ?? self.directions {
                     ResearchContextView(
                         futureDirections: .constant(directions),
                         onGenerateDirections: {}
@@ -141,7 +204,7 @@ struct ButtonRowView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .padding()
                 } else {
-                    Text("No research directions available yet. Generate them from the summary view first.")
+                    Text("Generating research directions... Please wait or try again.")
                         .padding()
                         .multilineTextAlignment(.center)
                         .navigationTitle("Research Directions")
@@ -151,7 +214,7 @@ struct ButtonRowView: View {
         }
         .sheet(isPresented: $showLiteratureView) {
             NavigationView {
-                if let citations = scan.researchContext?.literatureContext {
+                if let citations = scan.researchContext?.literatureContext ?? self.citations {
                     LiteratureContextView(
                         citations: .constant(citations),
                         onGenerateCitations: {}
@@ -160,11 +223,108 @@ struct ButtonRowView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .padding()
                 } else {
-                    Text("No literature context available yet. Generate it from the summary view first.")
+                    Text("Generating literature context... Please wait or try again.")
                         .padding()
                         .multilineTextAlignment(.center)
                         .navigationTitle("Literature Context")
                         .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
+        .alert(isPresented: $showingError) {
+            Alert(
+                title: Text("Error"),
+                message: Text(errorMessage),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+    
+    // Generate author questions
+    private func generateQuestions() {
+        isGeneratingQuestions = true
+        
+        // Use the PerplexityService to generate questions
+        perplexityService.generateAuthorQuestions(from: scan.summaryPoints, rawText: scan.rawText) { result in
+            DispatchQueue.main.async {
+                isGeneratingQuestions = false
+                
+                switch result {
+                case .success(let generatedQuestions):
+                    self.questions = generatedQuestions
+                    showQuestionsView = true
+                    
+                    // Update the scan with the new questions
+                    let updatedScan = scan.withQuestions(generatedQuestions)
+                    dataStore.saveScan(updatedScan)
+                    
+                case .failure(let error):
+                    errorMessage = "Failed to generate questions: \(error.localizedDescription)"
+                    showingError = true
+                }
+            }
+        }
+    }
+    
+    // Generate future research directions
+    private func generateFutureDirections() {
+        isGeneratingDirections = true
+        
+        perplexityService.generateFutureDirections(from: scan.summaryPoints, rawText: scan.rawText) { result in
+            DispatchQueue.main.async {
+                isGeneratingDirections = false
+                
+                switch result {
+                case .success(let generatedDirections):
+                    self.directions = generatedDirections
+                    showDirectionsView = true
+                    
+                    // Update the scan with the new directions
+                    var updatedResearchContext = scan.researchContext ?? ResearchContext()
+                    updatedResearchContext = ResearchContext(
+                        futureDirections: generatedDirections,
+                        literatureContext: updatedResearchContext.literatureContext
+                    )
+                    
+                    var updatedScan = scan
+                    updatedScan.researchContext = updatedResearchContext
+                    dataStore.saveScan(updatedScan)
+                    
+                case .failure(let error):
+                    errorMessage = "Failed to generate research directions: \(error.localizedDescription)"
+                    showingError = true
+                }
+            }
+        }
+    }
+    
+    // Generate literature citations
+    private func generateLiteratureCitations() {
+        isGeneratingLiterature = true
+        
+        perplexityService.generateLiteratureCitations(from: scan.summaryPoints, rawText: scan.rawText) { result in
+            DispatchQueue.main.async {
+                isGeneratingLiterature = false
+                
+                switch result {
+                case .success(let generatedCitations):
+                    self.citations = generatedCitations
+                    showLiteratureView = true
+                    
+                    // Update the scan with the new citations
+                    var updatedResearchContext = scan.researchContext ?? ResearchContext()
+                    updatedResearchContext = ResearchContext(
+                        futureDirections: updatedResearchContext.futureDirections,
+                        literatureContext: generatedCitations
+                    )
+                    
+                    var updatedScan = scan
+                    updatedScan.researchContext = updatedResearchContext
+                    dataStore.saveScan(updatedScan)
+                    
+                case .failure(let error):
+                    errorMessage = "Failed to generate literature citations: \(error.localizedDescription)"
+                    showingError = true
                 }
             }
         }
