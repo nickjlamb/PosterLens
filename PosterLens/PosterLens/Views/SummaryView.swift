@@ -34,17 +34,12 @@ struct SummaryCardView: View {
 struct SummaryView: View {
     let scan: PosterScan
     @EnvironmentObject private var dataStore: DataStore
-    @State private var isGeneratingQuestions = false
-    @State private var showingQuestions = false
-    @State private var questions: [String]?
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var scanSaved = false
     
     init(scan: PosterScan) {
         self.scan = scan
-        _questions = State(initialValue: scan.authorQuestions)
-        _showingQuestions = State(initialValue: scan.authorQuestions != nil)
     }
     
     var body: some View {
@@ -74,76 +69,6 @@ struct SummaryView: View {
                     SummaryCardView(title: point.title, content: point.content)
                 }
                 
-                // Questions Section
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Questions for Author")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
-                        Spacer()
-                        
-                        if isGeneratingQuestions {
-                            ProgressView()
-                                .padding(.trailing, 8)
-                        }
-                        
-                        Button(action: {
-                            if questions == nil {
-                                generateQuestions()
-                            } else {
-                                showingQuestions.toggle()
-                            }
-                        }) {
-                            Text(questions == nil ? "Generate" : (showingQuestions ? "Hide" : "Show"))
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                        }
-                        .disabled(isGeneratingQuestions)
-                    }
-                    
-                    if showingQuestions, let questions = questions {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(Array(processedQuestions(questions).enumerated()), id: \.element.content) { index, processedQuestion in
-                                HStack(alignment: .top, spacing: 12) {
-                                    Text("\(index + 1)")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
-                                        .frame(width: 24, height: 24)
-                                        .background(Circle().fill(Color.blue))
-                                    
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        if !processedQuestion.title.isEmpty {
-                                            Text(processedQuestion.title)
-                                                .font(.subheadline)
-                                                .fontWeight(.bold)
-                                                .foregroundColor(.primary)
-                                        }
-                                        
-                                        Text(processedQuestion.content)
-                                            .font(.subheadline)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                        .padding(.top, 8)
-                    }
-                }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray6))
-                )
-                .padding(.vertical, 8)
                 
                 // Add ButtonRowView for the three interactive buttons
                 ButtonRowView(scan: scan)
@@ -225,53 +150,6 @@ struct SummaryView: View {
         return result
     }
     
-    // Process questions to extract headings and content
-    private func processedQuestions(_ questions: [String]) -> [(title: String, content: String)] {
-        return questions.map { question in
-            // Check if the question contains a heading (text between ** markers)
-            if let range = question.range(of: "\\*\\*(.*?)\\*\\*", options: .regularExpression) {
-                let heading = String(question[range])
-                    .replacingOccurrences(of: "**", with: "")
-                
-                // Get the content after the heading
-                let startIndex = question.index(range.upperBound, offsetBy: 0)
-                let content = String(question[startIndex...])
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: ":", with: "", options: .anchored)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                
-                return (title: heading, content: content)
-            } else {
-                // If no heading is found, use the entire question as content with no title
-                return (title: "", content: question)
-            }
-        }
-    }
-    
-    private func generateQuestions() {
-        isGeneratingQuestions = true
-        
-        let perplexityService = PerplexityService()
-        perplexityService.generateAuthorQuestions(from: scan.summaryPoints, rawText: scan.rawText) { result in
-            DispatchQueue.main.async {
-                isGeneratingQuestions = false
-                
-                switch result {
-                case .success(let generatedQuestions):
-                    self.questions = generatedQuestions
-                    self.showingQuestions = true
-                    
-                    // Update the scan with the new questions
-                    let updatedScan = scan.withQuestions(generatedQuestions)
-                    dataStore.saveScan(updatedScan)
-                    
-                case .failure(let error):
-                    self.errorMessage = "Failed to generate questions: \(error.localizedDescription)"
-                    self.showingError = true
-                }
-            }
-        }
-    }
 }
 
 struct SummaryView_Previews: PreviewProvider {
