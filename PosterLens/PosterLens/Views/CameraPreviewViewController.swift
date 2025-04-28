@@ -19,21 +19,11 @@ class CameraPreviewViewController: UIViewController {
     private var cancelButton: UIButton!
     private var flashButton: UIButton!
     private var gridButton: UIButton!
-    private var permissionSwitch: UISwitch!
-    private var permissionLabel: UILabel!
-    
     private var isGridVisible = false
     private var gridView: UIView?
     
-    // Permission state
-    var hasPermission: Bool = false {
-        didSet {
-            // Only update UI if view is loaded
-            if isViewLoaded {
-                updateCaptureButtonState()
-            }
-        }
-    }
+    // Always allow capture
+    var hasPermission: Bool = true
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -168,35 +158,13 @@ class CameraPreviewViewController: UIViewController {
         gridButton.tintColor = .white
         gridButton.addTarget(self, action: #selector(toggleGrid), for: .touchUpInside)
         
-        // Create permission toggle and label
-        permissionSwitch = UISwitch()
-        permissionSwitch.translatesAutoresizingMaskIntoConstraints = false
-        permissionSwitch.onTintColor = .systemBlue
-        permissionSwitch.isOn = false
-        permissionSwitch.addTarget(self, action: #selector(permissionToggled(_:)), for: .valueChanged)
-        
-        permissionLabel = UILabel()
-        permissionLabel.translatesAutoresizingMaskIntoConstraints = false
-        permissionLabel.text = "I have permission to photograph this poster"
-        permissionLabel.textColor = .white
-        permissionLabel.font = UIFont.systemFont(ofSize: 14, weight: .medium)
-        permissionLabel.numberOfLines = 0
-        permissionLabel.textAlignment = .right
-        
-        // Create a container view for permission controls
-        let permissionContainer = UIView()
-        permissionContainer.translatesAutoresizingMaskIntoConstraints = false
-        permissionContainer.backgroundColor = UIColor.black.withAlphaComponent(0.5)
-        permissionContainer.layer.cornerRadius = 8
+        // Permission UI removed - always allow capture
         
         // Add buttons to view
         view.addSubview(captureButton)
         view.addSubview(cancelButton)
         view.addSubview(flashButton)
         view.addSubview(gridButton)
-        view.addSubview(permissionContainer)
-        permissionContainer.addSubview(permissionLabel)
-        permissionContainer.addSubview(permissionSwitch)
         
         // Set up constraints
         NSLayoutConstraint.activate([
@@ -204,20 +172,6 @@ class CameraPreviewViewController: UIViewController {
             captureButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
             captureButton.widthAnchor.constraint(equalToConstant: 80),
             captureButton.heightAnchor.constraint(equalToConstant: 80),
-            
-            permissionContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            permissionContainer.bottomAnchor.constraint(equalTo: captureButton.topAnchor, constant: -20),
-            permissionContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 20),
-            permissionContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
-            
-            permissionLabel.leadingAnchor.constraint(equalTo: permissionContainer.leadingAnchor, constant: 12),
-            permissionLabel.centerYAnchor.constraint(equalTo: permissionContainer.centerYAnchor),
-            permissionLabel.trailingAnchor.constraint(equalTo: permissionSwitch.leadingAnchor, constant: -8),
-            
-            permissionSwitch.trailingAnchor.constraint(equalTo: permissionContainer.trailingAnchor, constant: -12),
-            permissionSwitch.centerYAnchor.constraint(equalTo: permissionContainer.centerYAnchor),
-            
-            permissionContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             
             cancelButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
             cancelButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
@@ -241,12 +195,7 @@ class CameraPreviewViewController: UIViewController {
     }
     
     @objc private func capturePhoto() {
-        // Check if we have permission
-        guard hasPermission else {
-            // Provide feedback that permission is required
-            showPermissionRequiredAnimation()
-            return
-        }
+        // Permission check removed - always allow capture
         
         // Animate the capture button
         UIView.animate(withDuration: 0.1, animations: {
@@ -271,64 +220,11 @@ class CameraPreviewViewController: UIViewController {
     }
     
     // Handle permission toggle changes
-    @objc private func permissionToggled(_ sender: UISwitch) {
-        hasPermission = sender.isOn
-        
-        // Notify delegate about permission change
-        delegate?.cameraPreviewViewControllerDidTogglePermission(self, hasPermission: hasPermission)
-        
-        // Provide haptic feedback
-        let generator = UISelectionFeedbackGenerator()
-        generator.selectionChanged()
-        
-        if sender.isOn {
-            // Highlight the capture button briefly to draw attention
-            UIView.animate(withDuration: 0.3, animations: {
-                self.captureButton.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
-                self.captureButton.alpha = 1.0
-            }) { _ in
-                UIView.animate(withDuration: 0.2) {
-                    self.captureButton.transform = CGAffineTransform.identity
-                }
-            }
-        }
-    }
+    // Permission toggled method removed
     
-    // Update the capture button state based on permission
-    private func updateCaptureButtonState() {
-        // Add nil check to prevent crash
-        guard captureButton != nil else { return }
-        
-        UIView.animate(withDuration: 0.2) {
-            self.captureButton.alpha = self.hasPermission ? 1.0 : 0.5
-        }
-    }
+    // Update capture button state method removed
     
-    // Show animation indicating permission is required
-    private func showPermissionRequiredAnimation() {
-        // Add nil checks to prevent crashes
-        guard permissionSwitch != nil, permissionLabel != nil else { return }
-        
-        // Shake the permission switch to draw attention
-        let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
-        animation.timingFunction = CAMediaTimingFunction(name: .linear)
-        animation.duration = 0.6
-        animation.values = [-10.0, 10.0, -8.0, 8.0, -5.0, 5.0, 0.0]
-        permissionSwitch.layer.add(animation, forKey: "shake")
-        
-        // Highlight the permission label
-        UIView.animate(withDuration: 0.3, animations: {
-            self.permissionLabel.textColor = UIColor.systemRed
-        }) { _ in
-            UIView.animate(withDuration: 0.3, delay: 0.5) {
-                self.permissionLabel.textColor = UIColor.white
-            }
-        }
-        
-        // Provide error haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.error)
-    }
+    // Permission required animation method removed
     
     @objc private func cancelButtonTapped() {
         // Notify delegate instead of trying to dismiss directly

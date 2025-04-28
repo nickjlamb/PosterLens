@@ -228,23 +228,7 @@ struct CameraView: View {
         }
         .fullScreenCover(isPresented: $showingScanner) {
             ZStack {
-                // Permission hint tooltip that appears in camera view
-                if onboardingManager.showPermissionHint {
-                    VStack {
-                        TooltipView(
-                            text: "Toggle this switch to confirm you have permission to photograph this poster",
-                            arrowPosition: .bottom
-                        ) {
-                            onboardingManager.dismissHint(hint: .permission)
-                        }
-                        .padding(.top, 120)
-                        .transition(.opacity)
-                        .animation(.easeInOut, value: onboardingManager.showPermissionHint)
-                        
-                        Spacer()
-                    }
-                    .zIndex(1) // Ensure tooltip appears above camera view
-                }
+                // Permission hint removed
                 
                 CameraPreviewViewControllerRepresentable(
                     onImageCaptured: { image in
@@ -314,8 +298,7 @@ struct CameraView: View {
             // Delayed action to allow animation to run
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 showingScanner = true
-                // Show permission hint when camera is activated
-                onboardingManager.showPermissionHintIfNeeded()
+                // Permission hint removed
                 
                 // Reset animation state for next use
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
