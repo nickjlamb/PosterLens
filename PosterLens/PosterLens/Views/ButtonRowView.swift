@@ -5,6 +5,8 @@ struct ContextButton: View {
     let iconName: String
     let action: () -> Void
     let gradient: LinearGradient
+    @State private var isPressed: Bool = false
+    @State private var isAnimating: Bool = false
     
     init(title: String, iconName: String, action: @escaping () -> Void) {
         self.title = title
@@ -35,20 +37,62 @@ struct ContextButton: View {
     }
     
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            // Trigger haptic feedback
+            if title == "What to Ask the Author" {
+                HapticManager.shared.mediumImpact()
+            } else {
+                HapticManager.shared.selection()
+            }
+            
+            // Trigger animation
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                isPressed = true
+            }
+            
+            // Reset after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                withAnimation {
+                    isPressed = false
+                }
+                // Call the actual action
+                action()
+            }
+        }) {
             VStack(spacing: 12) {
                 // Icon in a gradient circle
                 ZStack {
                     Circle()
                         .fill(gradient)
                         .frame(width: 60, height: 60)
-                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.black.opacity(isPressed ? 0.05 : 0.15), 
+                                radius: isPressed ? 2 : 4, 
+                                x: 0, 
+                                y: isPressed ? 1 : 2)
+                        .scaleEffect(isPressed ? 0.95 : 1.0)
                     
                     Image(systemName: iconName)
                         .font(.system(size: 24))
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
+                        .scaleEffect(isPressed ? 0.9 : 1.0)
+                        .rotationEffect(isAnimating ? Angle(degrees: 5) : Angle(degrees: 0))
+                        .animation(
+                            Animation.easeInOut(duration: 0.2)
+                                .repeatCount(1, autoreverses: true),
+                            value: isAnimating
+                        )
+                        .onAppear {
+                            // Small wiggle animation to attract attention
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                isAnimating = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                    isAnimating = false
+                                }
+                            }
+                        }
                 }
+                .pulseEffect(enabled: !isPressed, duration: 2.0)
                 
                 // Title text
                 Text(title)
@@ -61,10 +105,15 @@ struct ContextButton: View {
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(.systemBackground))
-                    .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
+                    .shadow(color: Color.black.opacity(isPressed ? 0.03 : 0.08), 
+                            radius: isPressed ? 2 : 3, 
+                            x: 0, 
+                            y: isPressed ? 0 : 1)
             )
+            .scaleEffect(isPressed ? 0.98 : 1.0)
+            .opacity(isPressed ? 0.9 : 1.0)
         }
-        .buttonStyle(ScaleButtonStyle())
+        .buttonStyle(PlainButtonStyle()) // Use plain button style since we're handling animations manually
     }
 }
 
@@ -164,13 +213,10 @@ struct ButtonRowView: View {
         .sheet(isPresented: $showDirectionsView) {
             NavigationView {
                 if let directions = scan.researchContext?.futureDirections ?? self.directions {
-                    ResearchContextView(
-                        futureDirections: .constant(directions),
-                        onGenerateDirections: {}
-                    )
-                    .navigationTitle("Research Directions")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .padding()
+                    ResearchDirectionsView(directions: directions)
+                        .navigationTitle("Research Directions")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .padding()
                 } else {
                     Text("Generating research directions... Please wait or try again.")
                         .padding()
@@ -203,6 +249,9 @@ struct ButtonRowView: View {
                     self.questions = generatedQuestions
                     showQuestionsView = true
                     
+                    // Provide success haptic feedback
+                    HapticManager.shared.success()
+                    
                     // Update the scan with the new questions
                     let updatedScan = scan.withQuestions(generatedQuestions)
                     dataStore.saveScan(updatedScan)
@@ -210,6 +259,9 @@ struct ButtonRowView: View {
                 case .failure(let error):
                     errorMessage = "Failed to generate questions: \(error.localizedDescription)"
                     showingError = true
+                    
+                    // Provide error haptic feedback
+                    HapticManager.shared.error()
                 }
             }
         }
@@ -228,6 +280,9 @@ struct ButtonRowView: View {
                     self.directions = generatedDirections
                     showDirectionsView = true
                     
+                    // Provide success haptic feedback
+                    HapticManager.shared.success()
+                    
                     // Update the scan with the new directions
                     var updatedResearchContext = scan.researchContext ?? ResearchContext()
                     updatedResearchContext = ResearchContext(
@@ -242,45 +297,51 @@ struct ButtonRowView: View {
                 case .failure(let error):
                     errorMessage = "Failed to generate research directions: \(error.localizedDescription)"
                     showingError = true
+                    
+                    // Provide error haptic feedback
+                    HapticManager.shared.error()
                 }
             }
         }
     }
-    
 }
 
 struct QuestionListView: View {
     let questions: [String]
+    @State private var selectedQuestion: Int? = nil
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(Array(processedQuestions().enumerated()), id: \.element.content) { index, processedQuestion in
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(width: 24, height: 24)
-                            .background(Circle().fill(Color.purple))
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            if !processedQuestion.title.isEmpty {
-                                Text(processedQuestion.title)
-                                    .font(.subheadline)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.primary)
+                    QuestionCardView(
+                        index: index + 1,
+                        question: processedQuestion,
+                        isSelected: selectedQuestion == index,
+                        onTap: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                if selectedQuestion == index {
+                                    selectedQuestion = nil
+                                } else {
+                                    // Provide haptic feedback on selection
+                                    HapticManager.shared.selection()
+                                    selectedQuestion = index
+                                }
                             }
-                            
-                            Text(processedQuestion.content)
-                                .font(.subheadline)
-                                .fixedSize(horizontal: false, vertical: true)
                         }
-                    }
-                    .padding(.vertical, 4)
+                    )
+                    .slideUpOnAppear(delay: Double(index) * 0.1)
                 }
             }
             .padding()
+        }
+        .onAppear {
+            // Auto-select the first question after a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    selectedQuestion = 0
+                }
+            }
         }
     }
     
@@ -308,6 +369,236 @@ struct QuestionListView: View {
     }
 }
 
+struct QuestionCardView: View {
+    let index: Int
+    let question: (title: String, content: String)
+    let isSelected: Bool
+    let onTap: () -> Void
+    
+    private var gradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.purple, Color.purple.opacity(0.7)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header with number and title
+            HStack(alignment: .center, spacing: 12) {
+                Text("\(index)")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(gradient))
+                    .shadow(color: Color.purple.opacity(0.3), radius: 2, x: 0, y: 1)
+                
+                if !question.title.isEmpty {
+                    Text(question.title)
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                Image(systemName: isSelected ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(8)
+                    .background(
+                        Circle()
+                            .fill(Color(.systemBackground))
+                            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+                    )
+                    .rotationEffect(isSelected ? Angle(degrees: 0) : Angle(degrees: 0))
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(.systemBackground))
+            
+            // Content
+            if isSelected {
+                Text(question.content)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.systemBackground))
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity.combined(with: .move(edge: .top))
+                    ))
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(isSelected ? 0.12 : 0.08), 
+                        radius: isSelected ? 6 : 4, 
+                        x: 0, 
+                        y: isSelected ? 3 : 2)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+        .onTapGesture {
+            onTap()
+        }
+    }
+}
+
+// Create a new view for displaying research directions with a similar card-based UI
+struct ResearchDirectionsView: View {
+    let directions: [String]
+    @State private var selectedDirection: Int? = nil
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(Array(processedDirections().enumerated()), id: \.element.content) { index, processedDirection in
+                    DirectionCardView(
+                        index: index + 1,
+                        direction: processedDirection,
+                        isSelected: selectedDirection == index,
+                        onTap: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                if selectedDirection == index {
+                                    selectedDirection = nil
+                                } else {
+                                    // Provide haptic feedback on selection
+                                    HapticManager.shared.selection()
+                                    selectedDirection = index
+                                }
+                            }
+                        }
+                    )
+                    .slideUpOnAppear(delay: Double(index) * 0.1)
+                }
+            }
+            .padding()
+        }
+        .onAppear {
+            // Auto-select the first direction after a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    selectedDirection = 0
+                }
+            }
+        }
+    }
+    
+    // Process directions to extract headings and content
+    private func processedDirections() -> [(title: String, content: String)] {
+        return directions.map { direction in
+            // Check if the direction contains a heading (text between ** markers)
+            if let range = direction.range(of: "\\*\\*(.*?)\\*\\*", options: .regularExpression) {
+                let heading = String(direction[range])
+                    .replacingOccurrences(of: "**", with: "")
+                
+                // Get the content after the heading
+                let startIndex = direction.index(range.upperBound, offsetBy: 0)
+                let content = String(direction[startIndex...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: ":", with: "", options: .anchored)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                return (title: heading, content: content)
+            } else {
+                // If no heading is found, use the entire direction as content with no title
+                return (title: "", content: direction)
+            }
+        }
+    }
+}
+
+struct DirectionCardView: View {
+    let index: Int
+    let direction: (title: String, content: String)
+    let isSelected: Bool
+    let onTap: () -> Void
+    
+    private var gradient: LinearGradient {
+        LinearGradient(
+            colors: [Color.blue, Color.blue.opacity(0.7)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header with number and title
+            HStack(alignment: .center, spacing: 12) {
+                Text("\(index)")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(gradient))
+                    .shadow(color: Color.blue.opacity(0.3), radius: 2, x: 0, y: 1)
+                
+                if !direction.title.isEmpty {
+                    Text(direction.title)
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                Image(systemName: isSelected ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(8)
+                    .background(
+                        Circle()
+                            .fill(Color(.systemBackground))
+                            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+                    )
+                    .rotationEffect(isSelected ? Angle(degrees: 0) : Angle(degrees: 0))
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(.systemBackground))
+            
+            // Content
+            if isSelected {
+                Text(direction.content)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.systemBackground))
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity.combined(with: .move(edge: .top))
+                    ))
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(isSelected ? 0.12 : 0.08), 
+                        radius: isSelected ? 6 : 4, 
+                        x: 0, 
+                        y: isSelected ? 3 : 2)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+        .onTapGesture {
+            onTap()
+        }
+    }
+}
+
 struct ButtonRowView_Previews: PreviewProvider {
     static var previews: some View {
         ButtonRowView(scan: PosterScan(
@@ -329,21 +620,11 @@ struct ButtonRowView_Previews: PreviewProvider {
                 futureDirections: [
                     "**Integration with Clinical Data**: Future work should focus on integrating molecular findings with clinical data."
                 ],
-                literatureContext: [
-                    Citation(
-                        title: "The Role of Molecular Pathology in Cancer Diagnosis",
-                        authors: ["Smith J", "Johnson A"],
-                        journal: "Journal of Oncology",
-                        year: 2022,
-                        doi: "10.1000/xyz123",
-                        url: "https://example.com",
-                        abstract: "This review discusses the importance of molecular pathology in cancer diagnosis and treatment planning.",
-                        relevance: "Directly related to the poster's focus on molecular pathology in oncology."
-                    )
-                ]
+                literatureContext: nil
             )
         ))
         .padding()
         .previewLayout(.sizeThatFits)
+        .environmentObject(DataStore())
     }
 }
