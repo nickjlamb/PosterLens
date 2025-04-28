@@ -355,15 +355,27 @@ struct QuestionListView: View {
                 
                 // Get the content after the heading
                 let startIndex = question.index(range.upperBound, offsetBy: 0)
-                let content = String(question[startIndex...])
+                var content = String(question[startIndex...])
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: ":", with: "", options: .anchored)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 
+                // Remove any leading numbers (e.g., "1. ", "2. ")
+                if let numberRange = content.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
+                    content = String(content[numberRange.upperBound...])
+                }
+                
                 return (title: heading, content: content)
             } else {
-                // If no heading is found, use the entire question as content with no title
-                return (title: "", content: question)
+                // If no heading is found, remove any numbering and use as content
+                var content = question.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Remove any leading numbers (e.g., "1. ", "2. ")
+                if let numberRange = content.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
+                    content = String(content[numberRange.upperBound...])
+                }
+                
+                return (title: "", content: content)
             }
         }
     }
@@ -399,8 +411,8 @@ struct QuestionCardView: View {
                     Text(question.title)
                         .font(.headline)
                         .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
+                        .foregroundColor(.black)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 
                 Spacer()
@@ -418,7 +430,7 @@ struct QuestionCardView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 16)
             .background(Color(.systemBackground))
             
             // Content
@@ -502,15 +514,27 @@ struct ResearchDirectionsView: View {
                 
                 // Get the content after the heading
                 let startIndex = direction.index(range.upperBound, offsetBy: 0)
-                let content = String(direction[startIndex...])
+                var content = String(direction[startIndex...])
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: ":", with: "", options: .anchored)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 
+                // Remove any leading numbers (e.g., "1. ", "2. ")
+                if let numberRange = content.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
+                    content = String(content[numberRange.upperBound...])
+                }
+                
                 return (title: heading, content: content)
             } else {
-                // If no heading is found, use the entire direction as content with no title
-                return (title: "", content: direction)
+                // If no heading is found, remove any numbering and use as content
+                var content = direction.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Remove any leading numbers (e.g., "1. ", "2. ")
+                if let numberRange = content.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
+                    content = String(content[numberRange.upperBound...])
+                }
+                
+                return (title: "", content: content)
             }
         }
     }
@@ -546,8 +570,8 @@ struct DirectionCardView: View {
                     Text(direction.title)
                         .font(.headline)
                         .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
+                        .foregroundColor(.black)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 
                 Spacer()
@@ -565,7 +589,7 @@ struct DirectionCardView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.vertical, 16)
             .background(Color(.systemBackground))
             
             // Content
