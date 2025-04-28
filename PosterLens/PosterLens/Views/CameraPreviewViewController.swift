@@ -29,8 +29,7 @@ class CameraPreviewViewController: UIViewController {
         super.viewDidLoad()
         setupCaptureSession()
         setupUI()
-        // Update button state after UI is set up
-        updateCaptureButtonState()
+        // Capture button is always enabled
     }
     
     override func viewDidLayoutSubviews() {
