@@ -56,9 +56,8 @@ struct ScanCardView: View {
             .contextMenu {
                 Button(action: {
                     // Share action - Generate PDF and show share sheet
-                    if let pdfURLs = dataStore.exportScansAsPDF(withIDs: [scan.id]), !pdfURLs.isEmpty {
-                        showingShareSheet = true
-                    }
+                    // Ensure the PDF is generated and shared
+                    showingShareSheet = true
                 }) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
@@ -138,6 +137,10 @@ struct ScanCardView: View {
         .sheet(isPresented: $showingShareSheet) {
             if let pdfURLs = dataStore.exportScansAsPDF(withIDs: [scan.id]), !pdfURLs.isEmpty {
                 ShareSheet(items: pdfURLs)
+            } else {
+                // Fallback in case PDF generation fails
+                let text = "Poster Title: \(scan.title)\n\nSummary:\n" + scan.summaryPoints.joined(separator: "\n\n")
+                ShareSheet(items: [text])
             }
         }
     }
