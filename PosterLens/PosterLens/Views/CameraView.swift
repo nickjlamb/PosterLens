@@ -252,14 +252,20 @@ struct CameraView: View {
                         viewModel.processImage(image, hasPermission: hasPermission)
                         showingScanner = false
                         
-                        // Only navigate to results if we have a valid scan
-                        if viewModel.currentScan != nil {
-                            showingResults = true
-                            // Show history hint after completing a scan
-                            onboardingManager.showHistoryHintIfNeeded()
-                            
-                            // Force refresh of recent scans
-                            refreshID = UUID()
+                        // Always try to navigate to results
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            // Add a slight delay to ensure processing completes
+                            if viewModel.currentScan != nil {
+                                showingResults = true
+                                // Show history hint after completing a scan
+                                onboardingManager.showHistoryHintIfNeeded()
+                                
+                                // Force refresh of recent scans
+                                refreshID = UUID()
+                                
+                                // Provide success haptic feedback
+                                HapticManager.shared.success()
+                            }
                         }
                         
                         // Reset permission for next scan

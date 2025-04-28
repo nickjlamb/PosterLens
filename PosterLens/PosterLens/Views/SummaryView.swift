@@ -54,9 +54,12 @@ struct SummaryView: View {
                 }
                 
                 Text(scan.title)
-                    .font(.title)
+                    .font(.title3)
                     .fontWeight(.bold)
-                    .padding(.bottom, 4)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.bottom, 8)
+                    .padding(.horizontal)
                 
                 Text("Summary")
                     .font(.title2)
