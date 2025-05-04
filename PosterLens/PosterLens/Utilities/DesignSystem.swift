@@ -76,6 +76,40 @@ struct DesignSystem {
         static let card = ShadowStyle(color: .black.opacity(0.05), radius: 3, x: 0, y: 2)
     }
     
+    // MARK: - Colors and Gradients
+    
+    struct Colors {
+        /// Brand primary blue color
+        static let brandBlue = Color(red: 0.17, green: 0.45, blue: 0.87)
+        
+        /// Brand secondary blue color (darker)
+        static let brandBlueDark = Color(red: 0.12, green: 0.28, blue: 0.67)
+        
+        /// Brand gradient used for backgrounds and primary elements - matches AboutView gradient
+        static let brandGradient = LinearGradient(
+            colors: [brandBlue, brandBlueDark],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        
+        /// Decorative background circles
+        static func decorativeBackgroundCircles() -> some View {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 200, height: 200)
+                    .blur(radius: 30)
+                    .offset(x: -150, y: 50)
+                
+                Circle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 300, height: 300)
+                    .blur(radius: 40)
+                    .offset(x: 150, y: 400)
+            }
+        }
+    }
+    
     /// Shadow style definition
     struct ShadowStyle {
         let color: Color

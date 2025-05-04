@@ -23,6 +23,7 @@ struct ContentView: View {
                                 showingAboutView = true
                             }) {
                                 Image(systemName: "info.circle")
+                                    .foregroundColor(.white)
                             }
                         )
                 }
