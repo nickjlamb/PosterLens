@@ -4,18 +4,29 @@ import UIKit
 
 class DataStore: ObservableObject {
     @Published var savedScans: [PosterScan] = []
+    @Published var conversations: [Conversation] = []
     
     private let saveKey = "savedPosterScans"
+    private let conversationsKey = "savedConversations"
     private var cancellables = Set<AnyCancellable>()
     
     init() {
         loadSavedScans()
+        loadConversations()
         
         // Set up automatic saving when savedScans changes
         $savedScans
             .debounce(for: 0.5, scheduler: RunLoop.main)
             .sink { [weak self] _ in
                 self?.saveScans()
+            }
+            .store(in: &cancellables)
+            
+        // Set up automatic saving when conversations change
+        $conversations
+            .debounce(for: 0.5, scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.saveConversations()
             }
             .store(in: &cancellables)
     }
@@ -173,5 +184,68 @@ class DataStore: ObservableObject {
     func clearAllScans() {
         savedScans.removeAll()
         UserDefaults.standard.removeObject(forKey: saveKey)
+    }
+    
+    // MARK: - Conversation Management
+    
+    /// Get the conversation for a specific poster, or create a new one if none exists
+    func getOrCreateConversation(for posterId: UUID) -> Conversation {
+        if let existingConversation = conversations.first(where: { $0.posterId == posterId }) {
+            return existingConversation
+        } else {
+            let newConversation = Conversation(posterId: posterId)
+            conversations.append(newConversation)
+            return newConversation
+        }
+    }
+    
+    /// Add a message to a specific conversation
+    func addMessage(_ message: ChatMessage, to conversationId: UUID) {
+        print("🔄 DataStore.addMessage called - message: \(message.sender), conversation ID: \(conversationId)")
+        
+        if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
+            print("✅ Found conversation at index \(index), adding message")
+            conversations[index].addMessage(message)
+            
+            // Explicitly trigger objectWillChange to ensure UI updates
+            objectWillChange.send()
+            print("📣 Sent objectWillChange notification")
+        } else {
+            print("❌ No matching conversation found for ID: \(conversationId)")
+        }
+    }
+    
+    /// Delete a conversation
+    func deleteConversation(with id: UUID) {
+        conversations.removeAll(where: { $0.id == id })
+    }
+    
+    /// Delete all conversations for a specific poster
+    func deleteConversations(for posterId: UUID) {
+        conversations.removeAll(where: { $0.posterId == posterId })
+    }
+    
+    /// Save conversations to UserDefaults
+    private func saveConversations() {
+        do {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(conversations)
+            UserDefaults.standard.set(data, forKey: conversationsKey)
+        } catch {
+            print("Failed to save conversations: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Load conversations from UserDefaults
+    private func loadConversations() {
+        guard let data = UserDefaults.standard.data(forKey: conversationsKey) else { return }
+        
+        do {
+            let decoder = JSONDecoder()
+            conversations = try decoder.decode([Conversation].self, from: data)
+        } catch {
+            print("Failed to load conversations: \(error.localizedDescription)")
+            UserDefaults.standard.removeObject(forKey: conversationsKey)
+        }
     }
 }

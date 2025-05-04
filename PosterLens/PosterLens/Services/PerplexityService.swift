@@ -30,7 +30,7 @@ enum PerplexityError: Error, LocalizedError {
 class PerplexityService {
     // Hardcoded API key provided by the user
     private let defaultAPIKey = "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"
-    private var apiKey: String
+    var apiKey: String
     private let baseURL = "https://api.perplexity.ai/chat/completions"
     
     // Initialize with API key from environment or configuration
@@ -266,7 +266,13 @@ class PerplexityService {
         
         \(text)
         
-        Format your response as a list of bullet points only, with no introduction or conclusion. Each bullet point should be a complete, self-contained piece of information. Limit to 5-7 key points total.
+        Format your response as a list of 5-7 SEPARATE bullet points, with no introduction or conclusion. Each bullet point must start with a heading in the format **Heading** followed by the content (no colon between the heading and content).
+        
+        Example format:
+        1. **Main Research Question** The study aims to investigate...
+        2. **Methodology** The researchers utilized a mixed-methods approach...
+        
+        Each bullet point should be a complete, self-contained piece of information. Ensure each point is formatted as a separate, distinct bullet.
         """
     }
     
@@ -291,14 +297,56 @@ class PerplexityService {
         4. Discuss connections to related research or broader scientific context
         5. Probe deeper into the most interesting or novel aspects of the findings
         
-        Format your response as a numbered list of 5 questions only, with no introduction or conclusion. Each question should be thoughtful, specific to this research, and demonstrate understanding of the scientific content.
+        Format your response as a numbered list of 5 separate bullet points (using ** for headings), with no introduction or conclusion. Each point should begin with a heading followed by the question (no colon between the heading and question).
+        
+        Example format:
+        1. **Limitations** What were the main limitations of your approach?
+        2. **Future Directions** How do you plan to build on these findings in future research?
+        
+        Each question should be thoughtful, specific to this research, and demonstrate understanding of the scientific content.
         """
+    }
+    
+    // Helper function to remove all types of academic references from text
+    private func removeReferences(from text: String) -> String {
+        var cleanText = text
+        
+        // Remove standard square bracket references: [1], [2], etc.
+        cleanText = cleanText.replacingOccurrences(of: "\\s*\\[\\d+\\]\\s*", with: " ", options: .regularExpression)
+        
+        // Remove multiple references: [1,2], [3,4,5], [6-8], etc.
+        cleanText = cleanText.replacingOccurrences(of: "\\s*\\[\\d+(?:[-,]\\d+)*\\]\\s*", with: " ", options: .regularExpression)
+        
+        // Remove superscript references: text¹, text², etc.
+        cleanText = cleanText.replacingOccurrences(of: "\\s*[¹²³⁴⁵⁶⁷⁸⁹⁰]+\\s*", with: " ", options: .regularExpression)
+        
+        // Remove trailing parenthetical numbers at the end of sentences: text (1) or text. (2)
+        cleanText = cleanText.replacingOccurrences(of: "\\s*\\(\\d+\\)(?:\\s*|\\.$)", with: ".", options: .regularExpression)
+        
+        // Remove trailing numbered references like "text 1." or "text 2"
+        cleanText = cleanText.replacingOccurrences(of: "\\s+\\d+\\.?$", with: "", options: .regularExpression)
+        
+        // Remove any standalone numbers that might be references: 1. or 2.
+        cleanText = cleanText.replacingOccurrences(of: "^\\s*\\d+\\.?\\s*$", with: "", options: .regularExpression)
+        
+        // Clean up any double spaces created by replacements
+        cleanText = cleanText.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        
+        // Remove trailing periods if there are multiple
+        while cleanText.hasSuffix("..") {
+            cleanText = String(cleanText.dropLast())
+        }
+        
+        return cleanText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
     // Process the API response into clean bullet points
     private func processBulletPoints(from content: String) -> [String] {
+        // First, clean the entire content of references
+        let cleanedContent = removeReferences(from: content)
+        
         // Split the content by lines
-        let lines = content.components(separatedBy: .newlines)
+        let lines = cleanedContent.components(separatedBy: .newlines)
         
         // Filter for bullet point lines and clean them up
         var bulletPoints = lines.compactMap { (line: String) -> String? in
@@ -309,34 +357,157 @@ class PerplexityService {
                 return nil
             }
             
+            // Clean any remaining references at the line level to be thorough
+            let cleanedLine = removeReferences(from: trimmed)
+            
             // Check if line starts with a bullet point or dash
-            if trimmed.hasPrefix("•") || trimmed.hasPrefix("-") || trimmed.hasPrefix("*") {
+            if cleanedLine.hasPrefix("•") || cleanedLine.hasPrefix("-") || cleanedLine.hasPrefix("*") {
                 // Remove the bullet character and trim again
-                let bulletRemoved = trimmed.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+                let bulletRemoved = cleanedLine.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
                 return bulletRemoved.isEmpty ? nil : bulletRemoved
-            } else if trimmed.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil {
+            } else if cleanedLine.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil {
                 // Handle numbered lists (e.g., "1. Item")
-                if let dotRange = trimmed.range(of: ". ") {
-                    let bulletRemoved = trimmed[dotRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                if let dotRange = cleanedLine.range(of: ". ") {
+                    let bulletRemoved = cleanedLine[dotRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
                     return bulletRemoved.isEmpty ? nil : String(bulletRemoved)
                 }
             }
             
             // If it's not a bullet point but not empty, include it anyway
             // This helps capture points that might not be properly formatted
-            return trimmed
+            return cleanedLine
         }
         
         // If no bullet points were found, try to create them from paragraphs
         if bulletPoints.isEmpty {
-            bulletPoints = lines.filter { (line: String) -> Bool in
-                !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            bulletPoints = lines.compactMap { (line: String) -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    return nil
+                }
+                
+                // Clean any references again
+                return removeReferences(from: trimmed)
+            }
+        }
+        
+        // Handle the case where we might have a single long string instead of separate bullet points
+        if bulletPoints.count == 1 && bulletPoints[0].count > 100 {
+            let longText = bulletPoints[0]
+            
+            // Try to split by numbering
+            let numberPattern = #"(?:\n|\r\n?|\A)\s*\d+\.\s+"#
+            if let regex = try? NSRegularExpression(pattern: numberPattern) {
+                let ranges = regex.matches(in: longText, range: NSRange(longText.startIndex..., in: longText)).map { $0.range }
+                
+                if ranges.count > 1 {
+                    // Extract the segments between numbered markers
+                    var newBullets: [String] = []
+                    for i in 0..<ranges.count {
+                        let startRange = ranges[i]
+                        let endIndex = i < ranges.count - 1 ? ranges[i+1].location : longText.count
+                        
+                        if let rangeStart = Range(NSRange(location: startRange.location, length: startRange.length), in: longText),
+                           let textRange = Range(NSRange(location: startRange.location, length: endIndex - startRange.location), in: longText) {
+                            
+                            // Remove the numbering itself
+                            let marker = String(longText[rangeStart]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            var segment = String(longText[textRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            // Remove the marker from the beginning
+                            if segment.hasPrefix(marker) {
+                                segment = String(segment.dropFirst(marker.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                            
+                            if !segment.isEmpty {
+                                newBullets.append(segment)
+                            }
+                        }
+                    }
+                    
+                    if !newBullets.isEmpty {
+                        bulletPoints = newBullets
+                    }
+                }
+            }
+            
+            // If we still don't have multiple bullet points, try splitting by double asterisk headings
+            if bulletPoints.count == 1 {
+                let headingPattern = #"(\*\*[^*]+\*\*)"#
+                if let regex = try? NSRegularExpression(pattern: headingPattern) {
+                    let matches = regex.matches(in: longText, range: NSRange(longText.startIndex..., in: longText))
+                    
+                    if matches.count > 1 {
+                        var newBullets: [String] = []
+                        for i in 0..<matches.count {
+                            if let headingRange = Range(matches[i].range, in: longText) {
+                                // Get everything until the next heading or end
+                                let heading = String(longText[headingRange])
+                                
+                                let startPos = headingRange.upperBound
+                                let endPos = i < matches.count - 1 ? 
+                                    (Range(matches[i+1].range, in: longText)?.lowerBound ?? longText.endIndex) : 
+                                    longText.endIndex
+                                
+                                if startPos < endPos {
+                                    var content = String(longText[startPos..<endPos]).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    
+                                    // Remove the leading colon if present
+                                    if content.hasPrefix(":") {
+                                        content = String(content.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    }
+                                    
+                                    newBullets.append("\(heading) \(content)")
+                                }
+                            }
+                        }
+                        
+                        if !newBullets.isEmpty {
+                            bulletPoints = newBullets
+                        }
+                    }
+                }
+            }
+            
+            // As a last resort, try to split by periods
+            if bulletPoints.count == 1 {
+                let segments = longText.components(separatedBy: ". ")
+                if segments.count > 2 {  // Only consider if we get meaningful segments
+                    bulletPoints = segments.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) + "." }
+                        .filter { !$0.isEmpty && $0.count > 15 }  // Only keep substantive sentences
+                }
             }
         }
         
         // Limit to a reasonable number of bullet points
-        if bulletPoints.count > 10 {
-            bulletPoints = Array(bulletPoints.prefix(10))
+        if bulletPoints.count > 7 {
+            bulletPoints = Array(bulletPoints.prefix(7))
+        } else if bulletPoints.count < 3 {
+            // If we still have too few bullet points, try to split longer ones
+            let longBulletCutoff = 200  // Characters
+            var expandedBullets: [String] = []
+            
+            for bullet in bulletPoints {
+                if bullet.count > longBulletCutoff {
+                    // This bullet is very long - try to split it by sentences
+                    let sentences = bullet.components(separatedBy: ". ")
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) + "." }
+                        .filter { !$0.isEmpty && $0.count > 15 }
+                    
+                    if sentences.count > 1 {
+                        expandedBullets.append(contentsOf: sentences)
+                    } else {
+                        expandedBullets.append(bullet)
+                    }
+                } else {
+                    expandedBullets.append(bullet)
+                }
+            }
+            
+            // If we got a better breakdown, use it
+            if expandedBullets.count > bulletPoints.count && expandedBullets.count <= 7 {
+                bulletPoints = expandedBullets
+            }
         }
         
         return bulletPoints
@@ -344,8 +515,11 @@ class PerplexityService {
     
     // Process the API response into clean questions
     private func processQuestions(from content: String) -> [String] {
+        // First, clean the entire content of references
+        let cleanedContent = removeReferences(from: content)
+        
         // Split the content by lines
-        let lines = content.components(separatedBy: .newlines)
+        let lines = cleanedContent.components(separatedBy: .newlines)
         
         // Filter for question lines and clean them up
         var questions = lines.compactMap { (line: String) -> String? in
@@ -356,17 +530,20 @@ class PerplexityService {
                 return nil
             }
             
+            // Clean at line level again to be extra thorough
+            let cleanedLine = removeReferences(from: trimmed)
+            
             // Check if line starts with a number (e.g., "1. Question")
-            if trimmed.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil {
-                if let dotRange = trimmed.range(of: ". ") {
-                    let questionText = trimmed[dotRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            if cleanedLine.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil {
+                if let dotRange = cleanedLine.range(of: ". ") {
+                    let questionText = cleanedLine[dotRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
                     return questionText.isEmpty ? nil : String(questionText)
                 }
             }
             
             // If it contains a question mark, it's probably a question
-            if trimmed.contains("?") {
-                return trimmed
+            if cleanedLine.contains("?") {
+                return cleanedLine
             }
             
             return nil
@@ -374,7 +551,7 @@ class PerplexityService {
         
         // If no questions were found, try to extract sentences ending with question marks
         if questions.isEmpty {
-            let fullText = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fullText = cleanedContent
             let questionPattern = #"[^.!?]+\?"#
             
             if let regex = try? NSRegularExpression(pattern: questionPattern) {
@@ -383,9 +560,93 @@ class PerplexityService {
                 
                 questions = matches.compactMap { (match: NSTextCheckingResult) -> String? in
                     if let range = Range(match.range, in: fullText) {
-                        return String(fullText[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let questionText = String(fullText[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        // Clean each extracted question again
+                        return removeReferences(from: questionText)
                     }
                     return nil
+                }
+            }
+        }
+        
+        // Handle the case where we might have a single long string instead of separate questions
+        if questions.count == 1 && questions[0].count > 100 {
+            let longQuestion = questions[0]
+            
+            // Try to split by numbering (1., 2., etc.)
+            let numberPattern = #"(?:\n|\r\n?|\A)\s*\d+\.\s+"#
+            if let regex = try? NSRegularExpression(pattern: numberPattern) {
+                let ranges = regex.matches(in: longQuestion, range: NSRange(longQuestion.startIndex..., in: longQuestion)).map { $0.range }
+                
+                if ranges.count > 1 {
+                    // Extract the segments between numbered markers
+                    var newQuestions: [String] = []
+                    for i in 0..<ranges.count {
+                        let startRange = ranges[i]
+                        let endIndex = i < ranges.count - 1 ? ranges[i+1].location : longQuestion.count
+                        
+                        if let rangeStart = Range(NSRange(location: startRange.location, length: startRange.length), in: longQuestion),
+                           let textRange = Range(NSRange(location: startRange.location, length: endIndex - startRange.location), in: longQuestion) {
+                            
+                            // Remove the numbering itself
+                            let marker = String(longQuestion[rangeStart]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            var segment = String(longQuestion[textRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            // Remove the marker from the beginning
+                            if segment.hasPrefix(marker) {
+                                segment = String(segment.dropFirst(marker.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                            
+                            if !segment.isEmpty {
+                                newQuestions.append(segment)
+                            }
+                        }
+                    }
+                    
+                    if !newQuestions.isEmpty {
+                        questions = newQuestions
+                    }
+                }
+            }
+            
+            // If we still don't have multiple questions, try splitting by double asterisk headings
+            if questions.count == 1 {
+                let headingPattern = #"(\*\*[^*]+\*\*)"#
+                if let regex = try? NSRegularExpression(pattern: headingPattern) {
+                    let matches = regex.matches(in: longQuestion, range: NSRange(longQuestion.startIndex..., in: longQuestion))
+                    
+                    if matches.count > 1 {
+                        var newQuestions: [String] = []
+                        for i in 0..<matches.count {
+                            if let headingRange = Range(matches[i].range, in: longQuestion) {
+                                // Get everything until the next heading or end
+                                let heading = String(longQuestion[headingRange])
+                                
+                                let startPos = headingRange.upperBound
+                                let endPos = i < matches.count - 1 ? 
+                                    (Range(matches[i+1].range, in: longQuestion)?.lowerBound ?? longQuestion.endIndex) : 
+                                    longQuestion.endIndex
+                                
+                                if startPos < endPos {
+                                    let content = String(longQuestion[startPos..<endPos]).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    newQuestions.append("\(heading): \(content)")
+                                }
+                            }
+                        }
+                        
+                        if !newQuestions.isEmpty {
+                            questions = newQuestions
+                        }
+                    }
+                }
+            }
+            
+            // As a last resort, try to split by question marks
+            if questions.count == 1 {
+                let segments = longQuestion.components(separatedBy: "? ")
+                if segments.count > 1 {
+                    questions = segments.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) + "?" }
+                        .filter { !$0.isEmpty && $0.count > 5 }
                 }
             }
         }
@@ -625,10 +886,14 @@ class PerplexityService {
         2. Explain why this direction is promising or important
         3. Suggest how researchers might approach this direction
         
-        Format your response as a list of 5 future research directions with headings. Each direction should have a clear heading followed by a brief explanation. Format the heading with ** markers, like **Heading**: explanation.
+        Format your response as a numbered list with 5 SEPARATE bullet points. Each direction should have a clear heading followed by a brief explanation (no colon between heading and explanation). Format the heading with ** markers.
         
-        For example:
-        **Extended Data Collection**: This research could benefit from expanding the dataset to include...
+        Example format:
+        1. **Extended Data Collection** This research could benefit from expanding the dataset to include...
+        2. **Methodology Refinement** Further refinement of the experimental approach could...
+        3. **Clinical Translation** These findings could be applied in clinical settings by...
+        
+        Ensure each direction is completely separate from the others and formatted as its own distinct bullet point.
         """
     }
     
@@ -659,35 +924,50 @@ class PerplexityService {
     
     // Process the API response into research directions
     private func processDirections(from content: String) -> [String] {
-        let lines = content.components(separatedBy: .newlines)
+        // First, clean the entire content of all reference formats
+        let cleanedContent = removeReferences(from: content)
+        
+        let lines = cleanedContent.components(separatedBy: .newlines)
         var directions: [String] = []
         var currentDirection = ""
         
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Skip empty lines
             if trimmed.isEmpty {
                 if !currentDirection.isEmpty {
                     directions.append(currentDirection)
                     currentDirection = ""
                 }
-            } else if trimmed.range(of: #"^\d+\.\s+"#, options: .regularExpression) != nil {
+                continue
+            }
+            
+            // Clean again at the line level for extra thoroughness
+            let cleanedLine = removeReferences(from: trimmed)
+            
+            if cleanedLine.isEmpty {
+                continue
+            }
+            
+            if cleanedLine.range(of: #"^\d+\.\s+"#, options: .regularExpression) != nil {
                 // If we encounter a new numbered item
                 if !currentDirection.isEmpty {
                     directions.append(currentDirection)
                 }
-                currentDirection = trimmed
-            } else if trimmed.hasPrefix("**") {
+                currentDirection = cleanedLine
+            } else if cleanedLine.hasPrefix("**") {
                 // If we encounter a new direction with ** heading format
                 if !currentDirection.isEmpty {
                     directions.append(currentDirection)
                 }
-                currentDirection = trimmed
+                currentDirection = cleanedLine
             } else {
                 // Continue current direction
                 if !currentDirection.isEmpty {
-                    currentDirection += " " + trimmed
+                    currentDirection += " " + cleanedLine
                 } else {
-                    currentDirection = trimmed
+                    currentDirection = cleanedLine
                 }
             }
         }
@@ -697,9 +977,94 @@ class PerplexityService {
             directions.append(currentDirection)
         }
         
-        // If we couldn't parse properly, just use the original lines
+        // If we couldn't parse properly, just use the original lines with all references removed
         if directions.isEmpty {
-            directions = lines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            directions = lines.compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    return nil
+                }
+                // Extra thorough cleaning of each line
+                return removeReferences(from: trimmed)
+            }
+        }
+        
+        // Final cleaning pass on each direction and ensure we have properly separated items
+        directions = directions.map { removeReferences(from: $0) }
+            .filter { !$0.isEmpty }
+            
+        // Make sure we have separate items for each direction
+        // If we only have one long item, try to split it into separate items
+        if directions.count == 1 && directions[0].count > 100 {
+            let cleanContent = directions[0]
+            
+            // Try to split by numbering 1., 2., etc.
+            let numberPattern = #"(?:\n|\r\n?|\A)\s*\d+\.\s+"#
+            if let regex = try? NSRegularExpression(pattern: numberPattern) {
+                let ranges = regex.matches(in: cleanContent, range: NSRange(cleanContent.startIndex..., in: cleanContent)).map { $0.range }
+                
+                if ranges.count > 1 {
+                    // Extract the segments between numbered markers
+                    var newDirections: [String] = []
+                    for i in 0..<ranges.count {
+                        let startRange = ranges[i]
+                        let endIndex = i < ranges.count - 1 ? ranges[i+1].location : cleanContent.count
+                        
+                        if let rangeStart = Range(NSRange(location: startRange.location, length: startRange.length), in: cleanContent),
+                           let textRange = Range(NSRange(location: startRange.location, length: endIndex - startRange.location), in: cleanContent) {
+                            
+                            // Remove the numbering itself
+                            let marker = String(cleanContent[rangeStart]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            var segment = String(cleanContent[textRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            // Remove the marker from the beginning
+                            if segment.hasPrefix(marker) {
+                                segment = String(segment.dropFirst(marker.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                            
+                            if !segment.isEmpty {
+                                newDirections.append(segment)
+                            }
+                        }
+                    }
+                    
+                    if !newDirections.isEmpty {
+                        directions = newDirections
+                    }
+                }
+            }
+            
+            // If we still don't have multiple directions, try splitting by double asterisk headings
+            if directions.count == 1 {
+                let headingPattern = #"(\*\*[^*]+\*\*)"#
+                if let regex = try? NSRegularExpression(pattern: headingPattern) {
+                    let matches = regex.matches(in: cleanContent, range: NSRange(cleanContent.startIndex..., in: cleanContent))
+                    
+                    if matches.count > 1 {
+                        var newDirections: [String] = []
+                        for i in 0..<matches.count {
+                            if let headingRange = Range(matches[i].range, in: cleanContent) {
+                                // Get everything until the next heading or end
+                                let heading = String(cleanContent[headingRange])
+                                
+                                let startPos = headingRange.upperBound
+                                let endPos = i < matches.count - 1 ? 
+                                    (Range(matches[i+1].range, in: cleanContent)?.lowerBound ?? cleanContent.endIndex) : 
+                                    cleanContent.endIndex
+                                
+                                if startPos < endPos {
+                                    let content = String(cleanContent[startPos..<endPos]).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    newDirections.append("\(heading): \(content)")
+                                }
+                            }
+                        }
+                        
+                        if !newDirections.isEmpty {
+                            directions = newDirections
+                        }
+                    }
+                }
+            }
         }
         
         // Limit to 5 directions
