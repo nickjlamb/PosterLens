@@ -1,5 +1,14 @@
 import SwiftUI
 
+// Preference key for tracking scroll position
+struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 // Helper view for sharing files
 struct ShareSheet: UIViewControllerRepresentable {
     var items: [Any]
@@ -28,28 +37,70 @@ struct ImprovedHistoryView: View {
     @State private var showingBatchDeleteAlert = false
     @State private var showingExportOptions = false
     
+    // Animation states
+    @State private var scrollOffset: CGFloat = 0
+    @State private var appeared = false
+    
     // Binding to the selected tab in ContentView
     var selectedTab: Binding<Int>?
     
     // Initialize with optional binding to selectedTab
     init(selectedTab: Binding<Int>? = nil) {
         self.selectedTab = selectedTab
+        
+        // Set grid columns with more appropriate spacing for landscape posters
+        self.gridColumns = [
+            GridItem(.flexible(), spacing: 20)
+        ]
     }
     
     var body: some View {
         NavigationView {
             GeometryReader { geometry in
                 ZStack(alignment: .bottom) {
+                    // Blue gradient background that matches AboutView and CameraView
+                    ZStack {
+                        DesignSystem.Colors.brandGradient
+                            .ignoresSafeArea()
+                            
+                        // Add decorative background circles with parallax effect
+                        DesignSystem.Colors.decorativeBackgroundCircles()
+                            .offset(y: scrollOffset * 0.3) // Parallax effect based on scroll
+                            .animation(.interpolatingSpring(stiffness: 50, damping: 80), value: scrollOffset)
+                            .zIndex(0)
+                    }
+                    
                     ScrollView {
+                        // Geometry reader to track scroll position
+                        GeometryReader { scrollGeo in
+                            Color.clear.preference(key: ScrollOffsetKey.self, 
+                                                  value: scrollGeo.frame(in: .named("scrollSpace")).minY)
+                        }
+                        .frame(height: 0)
+                        
                         if dataStore.savedScans.isEmpty {
                             emptyStateView
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 20)
+                                .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1), value: appeared)
                         } else {
                             gridView
+                                .opacity(appeared ? 1 : 0)
+                                .animation(.easeOut(duration: 0.4).delay(0.1), value: appeared)
                         }
+                    }
+                    .coordinateSpace(name: "scrollSpace")
+                    .onPreferenceChange(ScrollOffsetKey.self) { offset in
+                        scrollOffset = offset
                     }
                     .onAppear {
                         // Store the view height for placeholder calculations
                         viewHeight = geometry.size.height
+                        
+                        // Trigger appearance animations
+                        withAnimation {
+                            appeared = true
+                        }
                     }
                     .onChange(of: geometry.size.height) { newHeight in
                         viewHeight = newHeight
@@ -62,6 +113,8 @@ struct ImprovedHistoryView: View {
                 }
             }
             .navigationTitle(isSelectionMode ? "\(selectedScanIDs.count) Selected" : "Scan History")
+            .navigationBarTitleDisplayMode(.inline)
+            .preferredColorScheme(.dark) // Use dark mode for the entire screen to ensure white navigation text
             .toolbar {
                 // Leading items (left side)
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -73,10 +126,12 @@ struct ImprovedHistoryView: View {
                                 selectedScanIDs.removeAll()
                             }
                         }
+                        .foregroundColor(.white)
                     } else {
                         EditButton()
                             .disabled(dataStore.savedScans.isEmpty)
                             .environment(\.editMode, $isEditMode)
+                            .foregroundColor(.white)
                     }
                 }
                 
@@ -95,6 +150,7 @@ struct ImprovedHistoryView: View {
                                     }
                                 }
                             }
+                            .foregroundColor(.white)
                         } else {
                             // Only show Select button if there are scans
                             if !dataStore.savedScans.isEmpty {
@@ -103,21 +159,46 @@ struct ImprovedHistoryView: View {
                                         isSelectionMode = true
                                     }
                                 }
+                                .foregroundColor(.white)
                             }
                             
                             Menu {
                                 Button(action: {
-                                    // Toggle between 2 and 3 columns
-                                    withAnimation {
-                                        gridColumns = gridColumns.count == 2 ?
-                                            Array(repeating: GridItem(.flexible(), spacing: 12), count: 3) :
-                                            Array(repeating: GridItem(.flexible(), spacing: 16), count: 2)
+                                    // Haptic feedback
+                                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                    impactFeedback.impactOccurred()
+                                    
+                                    // Toggle between 1, 2 and 3 columns with spring animation
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                        if gridColumns.count == 1 {
+                                            // Switch to 2 columns
+                                            gridColumns = [
+                                                GridItem(.flexible(), spacing: 16),
+                                                GridItem(.flexible(), spacing: 16)
+                                            ]
+                                        } else if gridColumns.count == 2 {
+                                            // Switch to 3 columns
+                                            gridColumns = [
+                                                GridItem(.flexible(), spacing: 12),
+                                                GridItem(.flexible(), spacing: 12),
+                                                GridItem(.flexible(), spacing: 12)
+                                            ]
+                                        } else {
+                                            // Back to 1 column - best for landscape posters
+                                            gridColumns = [
+                                                GridItem(.flexible(), spacing: 20)
+                                            ]
+                                        }
                                     }
                                 }) {
+                                    // Dynamic label based on current column count and next state
                                     Label(
-                                        gridColumns.count == 2 ? "Three Columns" : "Two Columns",
-                                        systemImage: gridColumns.count == 2 ? "square.grid.3x2" : "square.grid.2x2"
+                                        gridColumns.count == 1 ? "Two Columns" : 
+                                        (gridColumns.count == 2 ? "Three Columns" : "Single Column"),
+                                        systemImage: gridColumns.count == 1 ? "square.grid.2x2" :
+                                        (gridColumns.count == 2 ? "square.grid.3x2" : "rectangle")
                                     )
+                                    .animation(.easeOut(duration: 0.2), value: gridColumns.count)
                                 }
                                 
                                 Button(action: {
@@ -147,6 +228,7 @@ struct ImprovedHistoryView: View {
                                 }
                             } label: {
                                 Image(systemName: "ellipsis.circle")
+                                    .foregroundColor(.white)
                             }
                         }
                     }
@@ -227,18 +309,35 @@ struct ImprovedHistoryView: View {
         HStack(spacing: 30) {
             // Export button
             Button(action: {
+                // Haptic feedback
+                let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
+                feedbackGenerator.impactOccurred()
+                
                 showingExportOptions = true
             }) {
                 VStack {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 22))
+                        .foregroundColor(.white)
                     Text("Export")
                         .font(.caption)
+                        .foregroundColor(.white)
                 }
+                .padding(.vertical, 5)
+                .padding(.horizontal, 20)
+                .background(
+                    Capsule()
+                        .fill(DesignSystem.Colors.brandBlue.opacity(0.7))
+                )
             }
+            .buttonStyle(PressableButtonStyle())
             
             // Delete button
             Button(action: {
+                // Haptic feedback for destructive action
+                let feedbackGenerator = UINotificationFeedbackGenerator()
+                feedbackGenerator.notificationOccurred(.warning)
+                
                 showingBatchDeleteAlert = true
             }) {
                 VStack {
@@ -247,29 +346,67 @@ struct ImprovedHistoryView: View {
                     Text("Delete")
                         .font(.caption)
                 }
-                .foregroundColor(.red)
+                .padding(.vertical, 5)
+                .padding(.horizontal, 20)
+                .background(
+                    Capsule()
+                        .fill(Color.red.opacity(0.7))
+                )
+                .foregroundColor(.white)
             }
+            .buttonStyle(PressableButtonStyle())
         }
         .padding()
         .frame(maxWidth: .infinity)
         .background(
-            Rectangle()
-                .fill(Material.regularMaterial)
-                .shadow(color: Color.black.opacity(0.2), radius: 5, x: 0, y: -2)
+            ZStack {
+                // Blurred background
+                Rectangle()
+                    .fill(Material.ultraThinMaterial)
+                
+                // Top divider line
+                Rectangle()
+                    .fill(LinearGradient(
+                        colors: [.white.opacity(0.3), .white.opacity(0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ))
+                    .frame(height: 1)
+                    .offset(y: -18)
+            }
+            .shadow(color: Color.black.opacity(0.2), radius: 5, x: 0, y: -2)
         )
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        // Improved transition with spring animation
+        .transition(
+            .asymmetric(
+                insertion: .move(edge: .bottom)
+                    .combined(with: .opacity)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.7)),
+                removal: .opacity
+                    .combined(with: .scale(scale: 0.95))
+                    .animation(.easeOut(duration: 0.2))
+            )
+        )
     }
     
     // Grid view for displaying scans
     private var gridView: some View {
         LazyVGrid(columns: gridColumns, spacing: 16) {
-            ForEach(dataStore.savedScans.sorted(by: { $0.date > $1.date })) { scan in
+            ForEach(Array(dataStore.savedScans.sorted(by: { $0.date > $1.date }).enumerated()), id: \.element.id) { index, scan in
                 if isEditMode.isEditing && !isSelectionMode {
                     // Edit mode for deletion (original functionality)
                     ScanCardView(scan: scan)
                         .overlay(
                             deleteButton(for: scan),
                             alignment: .topTrailing
+                        )
+                        // Subtle scale effect when editing
+                        .scaleEffect(appeared ? 1 : 0.95)
+                        .opacity(appeared ? 1 : 0)
+                        .animation(
+                            .spring(response: 0.4, dampingFraction: 0.7)
+                            .delay(0.05 * Double(index % 8)), 
+                            value: appeared
                         )
                 } else {
                     // Normal mode or selection mode
@@ -281,20 +418,44 @@ struct ImprovedHistoryView: View {
                             handleSelection(scan: scan, isSelected: isSelected)
                         }
                     )
+                    // Apply staggered entry animation
+                    .offset(y: appeared ? 0 : 20)
+                    .opacity(appeared ? 1 : 0)
+                    .animation(
+                        .spring(response: 0.4, dampingFraction: 0.7)
+                        .delay(0.05 * Double(index % 8)), 
+                        value: appeared
+                    )
+                    // Add hover effect on scroll for a more dynamic feel
+                    .modifier(ParallaxCard(scrollOffset: scrollOffset, itemIndex: index))
                 }
             }
             
             // Add placeholders to fill the screen
             ForEach(0..<calculatePlaceholderCount(), id: \.self) { index in
                 PlaceholderCardView(onTap: {
-                    // Switch to camera tab when placeholder is tapped
+                    // First switch to camera tab
                     selectedTab?.wrappedValue = 0
+                    
+                    // Then post notification to trigger camera
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(name: NSNotification.Name("ShowCamera"), object: nil)
+                    }
                 })
+                // Add staggered animations to placeholders too
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 15)
+                .animation(
+                    .spring(response: 0.4, dampingFraction: 0.7)
+                    .delay(0.1 + 0.05 * Double(index % 4)), 
+                    value: appeared
+                )
             }
         }
         .padding()
-        .animation(.default, value: dataStore.savedScans.count)
-        .animation(.default, value: selectedScanIDs.count)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: dataStore.savedScans.count)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedScanIDs.count)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: gridColumns.count)
     }
     
     // Handle selection of a scan
@@ -353,44 +514,79 @@ struct ImprovedHistoryView: View {
         VStack(spacing: 20) {
             Spacer()
             
+            // Icon with subtle floating animation
             Image(systemName: "doc.text.image")
                 .font(.system(size: 70))
-                .foregroundColor(.gray.opacity(0.7))
+                .foregroundColor(.white.opacity(0.7))
+                .modifier(FloatingAnimation(duration: 4, offset: 8))
+                .shadow(color: .white.opacity(0.2), radius: 10, x: 0, y: 5)
             
+            // Title with staggered animation
             Text("No Scans Yet")
                 .font(.title2)
                 .fontWeight(.medium)
+                .foregroundColor(.white)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             
+            // Description text
             Text("Tap the camera tab to scan your first scientific poster")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
+                .transition(.opacity.combined(with: .scale))
             
+            // Animated button with stronger visual cue
             Button(action: {
-                // Switch to camera tab
+                // Haptic feedback
+                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                impactFeedback.impactOccurred()
+                
+                // First switch to camera tab
                 selectedTab?.wrappedValue = 0
+                
+                // Then post notification to trigger camera
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(name: NSNotification.Name("ShowCamera"), object: nil)
+                }
             }) {
                 Text("Scan a Poster")
                     .fontWeight(.medium)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                    .background(Color.blue)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(DesignSystem.Colors.brandBlue)
+                            .shadow(color: Color.black.opacity(0.2), radius: 3, x: 0, y: 2)
+                    )
                     .foregroundColor(.white)
-                    .cornerRadius(8)
             }
+            .buttonStyle(PressableButtonStyle()) // Custom button style with press animation
             .padding(.top, 10)
             
             Spacer()
             
             // Visual guide for where scans will appear - fill the screen with placeholders
             LazyVGrid(columns: gridColumns, spacing: 16) {
-                ForEach(0..<calculateEmptyStatePlaceholderCount(), id: \.self) { _ in
+                ForEach(0..<calculateEmptyStatePlaceholderCount(), id: \.self) { index in
                     PlaceholderCardView(onTap: {
-                        // Switch to camera tab when placeholder is tapped
+                        // First switch to camera tab
                         selectedTab?.wrappedValue = 0
+                        
+                        // Then post notification to trigger camera
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            NotificationCenter.default.post(name: NSNotification.Name("ShowCamera"), object: nil)
+                        }
                     })
-                    .opacity(0.5)
+                    .opacity(0.4)
+                    // Stagger the appearance of each placeholder
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 20)
+                    .animation(
+                        .spring(response: 0.5, dampingFraction: 0.7)
+                        .delay(0.1 + Double(index % 4) * 0.1), 
+                        value: appeared
+                    )
                 }
             }
             .padding()
@@ -437,6 +633,76 @@ struct ImprovedHistoryView: View {
 }
 
 // Preview provider
+// Floating animation modifier
+struct FloatingAnimation: ViewModifier {
+    let duration: Double
+    let offset: CGFloat
+    @State private var isAnimating = false
+    
+    func body(content: Content) -> some View {
+        content
+            .offset(y: isAnimating ? -offset/2 : offset/2)
+            .animation(
+                Animation.easeInOut(duration: duration)
+                    .repeatForever(autoreverses: true),
+                value: isAnimating
+            )
+            .onAppear {
+                isAnimating = true
+            }
+    }
+}
+
+// Parallax effect for cards based on scroll position
+struct ParallaxCard: ViewModifier {
+    let scrollOffset: CGFloat
+    let itemIndex: Int
+    
+    func body(content: Content) -> some View {
+        content
+            .rotation3DEffect(
+                .degrees(calculateRotation()),
+                axis: (x: 0.3, y: 0.3, z: 0),
+                anchor: .center,
+                anchorZ: 0,
+                perspective: 0.5
+            )
+            .scaleEffect(calculateScale())
+            .zIndex(calculateScale() * 10)  // Bring to front when hovering
+    }
+    
+    // Calculate rotation based on scroll position and item index
+    private func calculateRotation() -> Double {
+        // Get an offset specific to this item's position
+        let itemOffset = Double(scrollOffset / 100) + Double(itemIndex % 3)
+        
+        // Create a small rotation (-1.5 to 1.5 degrees) based on scroll
+        return sin(itemOffset) * 1.5
+    }
+    
+    // Calculate scale based on scroll position
+    private func calculateScale() -> Double {
+        // Get an offset specific to this item
+        let itemOffset = Double(scrollOffset / 200) + Double(itemIndex % 4) * 0.25
+        
+        // Base scale
+        let baseScale = 1.0
+        
+        // Add a small variation based on sin wave (between 0.98 and 1.02)
+        return baseScale + sin(itemOffset) * 0.02
+    }
+}
+
+// Pressable button style with animation
+struct PressableButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .brightness(configuration.isPressed ? 0.1 : 0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
 struct ImprovedHistoryView_Previews: PreviewProvider {
     static var previews: some View {
         ImprovedHistoryView()
