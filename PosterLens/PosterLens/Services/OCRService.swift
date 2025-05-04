@@ -161,12 +161,28 @@ class OCRService {
                !trimmed.contains(",") && // Avoid author lists
                !trimmed.contains("Abstract") &&
                !trimmed.contains("Introduction") {
+                // Extract 5-7 key words from the title for brevity
+                let words = trimmed.components(separatedBy: .whitespaces)
+                if words.count > 7 {
+                    // Get first 5-7 meaningful words (exclude short words if possible)
+                    let meaningfulWords = words.filter { $0.count > 3 }.prefix(7)
+                    if meaningfulWords.count >= 5 {
+                        return meaningfulWords.joined(separator: " ")
+                    } else {
+                        // If we don't have 5 meaningful words, just take the first 7
+                        return words.prefix(7).joined(separator: " ")
+                    }
+                }
                 return trimmed
             }
         }
         
         // Fallback: use first line if it's not too short
         if let firstLine = lines.first, firstLine.count >= 5 {
+            let words = firstLine.components(separatedBy: .whitespaces)
+            if words.count > 7 {
+                return words.prefix(7).joined(separator: " ")
+            }
             return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         
