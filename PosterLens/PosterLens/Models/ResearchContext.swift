@@ -1,8 +1,8 @@
 import Foundation
 
 struct ResearchContext: Codable {
-    let futureDirections: [String]?
-    let literatureContext: [Citation]?
+    var futureDirections: [String]?
+    var literatureContext: [Citation]?
     
     init(futureDirections: [String]? = nil, literatureContext: [Citation]? = nil) {
         self.futureDirections = futureDirections

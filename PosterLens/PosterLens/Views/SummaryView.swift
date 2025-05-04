@@ -42,6 +42,11 @@ struct SummaryView: View {
         self.scan = scan
     }
     
+    @Environment(\.presentationMode) private var presentationMode
+    @State private var showCamera = false
+    @State private var showHistory = false
+    @State private var showChat = false
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -76,23 +81,64 @@ struct SummaryView: View {
                 // Add ButtonRowView for the three interactive buttons
                 ButtonRowView(scan: scan)
                 
-                if !scan.rawText.isEmpty {
-                    DisclosureGroup {
-                        Text(scan.rawText)
-                            .font(.body)
-                            .padding(.vertical)
-                    } label: {
-                        Text("Original Text")
-                            .font(.headline)
-                            .fontWeight(.semibold)
+                // Original Text section removed as it's not useful for users
+                
+                // Add action buttons row - Only navigation buttons
+                VStack(spacing: 16) {
+                    Divider()
+                        .padding(.vertical, 8)
+                    
+                    HStack(spacing: 16) {
+                        // Scan Another Button
+                        Button(action: {
+                            HapticManager.shared.mediumImpact()
+                            showCamera = true
+                            // Dismiss this view to avoid a deep navigation stack
+                            presentationMode.wrappedValue.dismiss()
+                            
+                            // Post notification to show camera
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                NotificationCenter.default.post(name: NSNotification.Name("ShowCamera"), object: nil)
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "camera.viewfinder")
+                                    .font(.headline)
+                                Text("Scan Another")
+                                    .font(.headline)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(DesignSystem.Colors.brandBlue)
+                            .cornerRadius(12)
+                            .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                        }
+                        
+                        // View Scanned Posters Button
+                        Button(action: {
+                            HapticManager.shared.mediumImpact()
+                            showHistory = true
+                        }) {
+                            HStack {
+                                Image(systemName: "list.bullet")
+                                    .font(.headline)
+                                Text("View All Scans")
+                                    .font(.headline)
+                            }
+                            .foregroundColor(DesignSystem.Colors.brandBlue)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.white)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(DesignSystem.Colors.brandBlue, lineWidth: 2)
+                            )
+                            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        }
                     }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
-                    )
                 }
+                .padding(.top, 8)
             }
             .padding()
         }
@@ -110,6 +156,14 @@ struct SummaryView: View {
                 scanSaved = true
             }
         }
+        .navigationDestination(isPresented: $showHistory) {
+            ImprovedHistoryView()
+                .environmentObject(dataStore)
+        }
+        .navigationDestination(isPresented: $showChat) {
+            SimpleChatView(posterScan: scan)
+                .environmentObject(dataStore)
+        }
     }
     
     // Process summary points to extract headings and content with deduplication
@@ -123,13 +177,25 @@ struct SummaryView: View {
             if let range = point.range(of: "\\*\\*(.*?)\\*\\*", options: .regularExpression) {
                 let heading = String(point[range])
                     .replacingOccurrences(of: "**", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 
                 // Get the content after the heading
                 let startIndex = point.index(range.upperBound, offsetBy: 0)
-                let content = String(point[startIndex...])
+                var content = String(point[startIndex...])
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: ":", with: "", options: .anchored)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Remove leading colon if present - handle multiple colons
+                while content.hasPrefix(":") {
+                    content = String(content.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                
+                // Remove trailing numbers that might be references
+                if let trailingNumberRange = content.range(of: "\\s+\\d+\\.?$", options: .regularExpression) {
+                    content = String(content[..<trailingNumberRange.lowerBound])
+                }
+                
+                // Remove references like [1], [2, 3], etc. using more comprehensive pattern
+                content = content.replacingOccurrences(of: "\\s*\\[\\d+(?:[-,]\\s*\\d+)*\\]\\s*", with: " ", options: .regularExpression)
                 
                 // Only add if this content hasn't been seen before
                 if uniquePoints[content] == nil {
@@ -138,7 +204,20 @@ struct SummaryView: View {
                 }
             } else {
                 // If no heading is found, use a more specific title
-                let content = point.trimmingCharacters(in: .whitespacesAndNewlines)
+                var content = point.trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Remove leading colon if present - handle multiple colons
+                while content.hasPrefix(":") {
+                    content = String(content.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                
+                // Remove trailing numbers that might be references
+                if let trailingNumberRange = content.range(of: "\\s+\\d+\\.?$", options: .regularExpression) {
+                    content = String(content[..<trailingNumberRange.lowerBound])
+                }
+                
+                // Remove references like [1], [2, 3], etc. using more comprehensive pattern
+                content = content.replacingOccurrences(of: "\\s*\\[\\d+(?:[-,]\\s*\\d+)*\\]\\s*", with: " ", options: .regularExpression)
                 
                 // Only add if this content hasn't been seen before
                 if uniquePoints[content] == nil {

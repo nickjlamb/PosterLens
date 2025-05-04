@@ -13,17 +13,23 @@ struct ContextButton: View {
         self.iconName = iconName
         self.action = action
         
-        // Use different gradients based on button title
+        // Use different gradients based on button title/function
         switch title {
-        case "What to Ask the Author":
+        case "Questions to Ask", "What to Ask the Author":
             self.gradient = LinearGradient(
                 colors: [Color.purple, Color.purple.opacity(0.6)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-        case "Where it's Heading":
+        case "Research Directions", "Where it's Heading":
             self.gradient = LinearGradient(
                 colors: [Color.blue, Color.blue.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case "Chat with AI":
+            self.gradient = LinearGradient(
+                colors: [DesignSystem.Colors.brandBlue, DesignSystem.Colors.brandBlueDark],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -59,7 +65,7 @@ struct ContextButton: View {
                 action()
             }
         }) {
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 // Icon in a gradient circle
                 ZStack {
                     Circle()
@@ -96,12 +102,17 @@ struct ContextButton: View {
                 
                 // Title text
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .multilineTextAlignment(.center)
                     .foregroundColor(.primary)
+                    .lineLimit(2) // Allow up to 2 lines
+                    .fixedSize(horizontal: false, vertical: true) // Allow text to wrap naturally
+                    .frame(maxWidth: .infinity, alignment: .center) // Center the text
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .frame(height: 120) // Increased height for all buttons
+            .frame(minWidth: 0, maxWidth: .infinity) // Ensure equal width distribution
+            .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(.systemBackground))
@@ -122,6 +133,7 @@ struct ButtonRowView: View {
     @EnvironmentObject private var dataStore: DataStore
     @State private var showQuestionsView: Bool = false
     @State private var showDirectionsView: Bool = false
+    @State private var showChatView: Bool = false  // New state for chat view
     @State private var isGeneratingQuestions: Bool = false
     @State private var isGeneratingDirections: Bool = false
     @State private var questions: [String]?
@@ -139,9 +151,11 @@ struct ButtonRowView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
             
-            HStack(spacing: 12) {
+            // Three columns of context buttons
+            HStack(spacing: 8) {
+                // First button: What to Ask the Author
                 ContextButton(
-                    title: "What to Ask the Author",
+                    title: "Questions to Ask",
                     iconName: "questionmark.circle",
                     action: {
                         if scan.authorQuestions != nil {
@@ -163,8 +177,9 @@ struct ButtonRowView: View {
                     }
                 )
                 
+                // Second button: Research Directions
                 ContextButton(
-                    title: "Where it's Heading",
+                    title: "Research Directions",
                     iconName: "arrow.up.forward.circle",
                     action: {
                         if scan.researchContext?.futureDirections != nil {
@@ -185,7 +200,17 @@ struct ButtonRowView: View {
                         }
                     }
                 )
+                
+                // New button: Chat with AI
+                ContextButton(
+                    title: "Chat with AI",
+                    iconName: "bubble.left.and.bubble.right.fill",
+                    action: {
+                        showChatView = true
+                    }
+                )
             }
+            .frame(maxWidth: .infinity) // Ensure HStack takes full width
             .padding(.horizontal, 4)
         }
         .padding()
@@ -225,6 +250,10 @@ struct ButtonRowView: View {
                         .navigationBarTitleDisplayMode(.inline)
                 }
             }
+        }
+        .navigationDestination(isPresented: $showChatView) {
+            SimpleChatView(posterScan: scan)
+                .environmentObject(dataStore)
         }
         .alert(isPresented: $showingError) {
             Alert(
@@ -283,15 +312,18 @@ struct ButtonRowView: View {
                     // Provide success haptic feedback
                     HapticManager.shared.success()
                     
-                    // Update the scan with the new directions
-                    var updatedResearchContext = scan.researchContext ?? ResearchContext()
-                    updatedResearchContext = ResearchContext(
-                        futureDirections: generatedDirections,
-                        literatureContext: updatedResearchContext.literatureContext
-                    )
-                    
+                    // Update the scan with the new directions without creating a new object
                     var updatedScan = scan
-                    updatedScan.researchContext = updatedResearchContext
+                    
+                    // Create or update research context
+                    if updatedScan.researchContext == nil {
+                        updatedScan.researchContext = ResearchContext()
+                    }
+                    
+                    // Update the future directions
+                    updatedScan.researchContext?.futureDirections = generatedDirections
+                    
+                    // Save the updated scan using the original ID
                     dataStore.saveScan(updatedScan)
                     
                 case .failure(let error):
@@ -308,40 +340,30 @@ struct ButtonRowView: View {
 
 struct QuestionListView: View {
     let questions: [String]
-    @State private var selectedQuestion: Int? = nil
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 24) {
+                // Introduction text
+                Text("Based on this poster, here are some suggested questions you might want to ask the presenter:")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .slideUpOnAppear(delay: 0.1)
+                
+                // Display all questions in a list format
                 ForEach(Array(processedQuestions().enumerated()), id: \.element.content) { index, processedQuestion in
-                    QuestionCardView(
+                    BulletPointView(
                         index: index + 1,
-                        question: processedQuestion,
-                        isSelected: selectedQuestion == index,
-                        onTap: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                if selectedQuestion == index {
-                                    selectedQuestion = nil
-                                } else {
-                                    // Provide haptic feedback on selection
-                                    HapticManager.shared.selection()
-                                    selectedQuestion = index
-                                }
-                            }
-                        }
+                        title: processedQuestion.title,
+                        content: processedQuestion.content,
+                        color: .purple
                     )
-                    .slideUpOnAppear(delay: Double(index) * 0.1)
+                    .slideUpOnAppear(delay: Double(index) * 0.05 + 0.2)
                 }
             }
             .padding()
-        }
-        .onAppear {
-            // Auto-select the first question after a delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                    selectedQuestion = 0
-                }
-            }
         }
     }
     
@@ -352,28 +374,53 @@ struct QuestionListView: View {
             if let range = question.range(of: "\\*\\*(.*?)\\*\\*", options: .regularExpression) {
                 let heading = String(question[range])
                     .replacingOccurrences(of: "**", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 
                 // Get the content after the heading
                 let startIndex = question.index(range.upperBound, offsetBy: 0)
                 var content = String(question[startIndex...])
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: ":", with: "", options: .anchored)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Remove leading colon if present - handle multiple colons
+                while content.hasPrefix(":") {
+                    content = String(content.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
                 
                 // Remove any leading numbers (e.g., "1. ", "2. ")
                 if let numberRange = content.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
                     content = String(content[numberRange.upperBound...])
                 }
+                
+                // Remove trailing numbers that might be references
+                if let trailingNumberRange = content.range(of: "\\s+\\d+\\.?$", options: .regularExpression) {
+                    content = String(content[..<trailingNumberRange.lowerBound])
+                }
+                
+                // Remove references like [1], [2, 3], etc. using more comprehensive pattern
+                content = content.replacingOccurrences(of: "\\s*\\[\\d+(?:[-,]\\s*\\d+)*\\]\\s*", with: " ", options: .regularExpression)
                 
                 return (title: heading, content: content)
             } else {
                 // If no heading is found, remove any numbering and use as content
                 var content = question.trimmingCharacters(in: .whitespacesAndNewlines)
                 
+                // Remove leading colon if present - handle multiple colons
+                while content.hasPrefix(":") {
+                    content = String(content.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                
                 // Remove any leading numbers (e.g., "1. ", "2. ")
                 if let numberRange = content.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
                     content = String(content[numberRange.upperBound...])
                 }
+                
+                // Remove trailing numbers that might be references
+                if let trailingNumberRange = content.range(of: "\\s+\\d+\\.?$", options: .regularExpression) {
+                    content = String(content[..<trailingNumberRange.lowerBound])
+                }
+                
+                // Remove references like [1], [2, 3], etc. using more comprehensive pattern
+                content = content.replacingOccurrences(of: "\\s*\\[\\d+(?:[-,]\\s*\\d+)*\\]\\s*", with: " ", options: .regularExpression)
                 
                 return (title: "", content: content)
             }
@@ -381,126 +428,79 @@ struct QuestionListView: View {
     }
 }
 
-struct QuestionCardView: View {
+// Reusable component for displaying bullet points
+struct BulletPointView: View {
     let index: Int
-    let question: (title: String, content: String)
-    let isSelected: Bool
-    let onTap: () -> Void
-    
-    private var gradient: LinearGradient {
-        LinearGradient(
-            colors: [Color.purple, Color.purple.opacity(0.7)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
+    let title: String
+    let content: String
+    let color: Color
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header with number and title
-            HStack(alignment: .center, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
+            // Title row with bullet point marker
+            HStack(alignment: .top, spacing: 10) {
+                // Number bullet
                 Text("\(index)")
-                    .font(.headline)
+                    .font(.subheadline)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(gradient))
-                    .shadow(color: Color.purple.opacity(0.3), radius: 2, x: 0, y: 1)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(color))
                 
-                if !question.title.isEmpty {
-                    Text(question.title)
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
+                VStack(alignment: .leading, spacing: 4) {
+                    // Title (if present)
+                    if !title.isEmpty {
+                        Text(title)
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    }
+                    
+                    // Main content text
+                    Text(content)
+                        .font(.body)
+                        .foregroundColor(.primary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                
-                Spacer()
-                
-                Image(systemName: isSelected ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .padding(8)
-                    .background(
-                        Circle()
-                            .fill(Color(.systemBackground))
-                            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
-                    )
-                    .rotationEffect(isSelected ? Angle(degrees: 0) : Angle(degrees: 0))
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
-            .background(Color(.systemBackground))
-            
-            // Content
-            if isSelected {
-                Text(question.content)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.systemBackground))
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity.combined(with: .move(edge: .top))
-                    ))
             }
         }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(.systemBackground))
-                .shadow(color: Color.black.opacity(isSelected ? 0.12 : 0.08), 
-                        radius: isSelected ? 6 : 4, 
-                        x: 0, 
-                        y: isSelected ? 3 : 2)
+                .shadow(color: Color.black.opacity(0.07), radius: 3, x: 0, y: 2)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .scaleEffect(isSelected ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-        .onTapGesture {
-            onTap()
-        }
     }
 }
 
-// Create a new view for displaying research directions with a similar card-based UI
+// Create a new view for displaying research directions with a consistent design
 struct ResearchDirectionsView: View {
     let directions: [String]
-    @State private var selectedDirection: Int? = nil
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 24) {
+                // Introduction text
+                Text("This research could lead to the following directions and developments:")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .slideUpOnAppear(delay: 0.1)
+                
+                // Display all directions in a list format
                 ForEach(Array(processedDirections().enumerated()), id: \.element.content) { index, processedDirection in
-                    DirectionCardView(
+                    BulletPointView(
                         index: index + 1,
-                        direction: processedDirection,
-                        isSelected: selectedDirection == index,
-                        onTap: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                if selectedDirection == index {
-                                    selectedDirection = nil
-                                } else {
-                                    // Provide haptic feedback on selection
-                                    HapticManager.shared.selection()
-                                    selectedDirection = index
-                                }
-                            }
-                        }
+                        title: processedDirection.title,
+                        content: processedDirection.content,
+                        color: .blue
                     )
-                    .slideUpOnAppear(delay: Double(index) * 0.1)
+                    .slideUpOnAppear(delay: Double(index) * 0.05 + 0.2)
                 }
             }
             .padding()
-        }
-        .onAppear {
-            // Auto-select the first direction after a delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                    selectedDirection = 0
-                }
-            }
         }
     }
     
@@ -511,114 +511,56 @@ struct ResearchDirectionsView: View {
             if let range = direction.range(of: "\\*\\*(.*?)\\*\\*", options: .regularExpression) {
                 let heading = String(direction[range])
                     .replacingOccurrences(of: "**", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 
                 // Get the content after the heading
                 let startIndex = direction.index(range.upperBound, offsetBy: 0)
                 var content = String(direction[startIndex...])
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: ":", with: "", options: .anchored)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                // Remove leading colon if present - handle multiple colons
+                while content.hasPrefix(":") {
+                    content = String(content.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
                 
                 // Remove any leading numbers (e.g., "1. ", "2. ")
                 if let numberRange = content.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
                     content = String(content[numberRange.upperBound...])
                 }
+                
+                // Remove trailing numbers that might be references
+                if let trailingNumberRange = content.range(of: "\\s+\\d+\\.?$", options: .regularExpression) {
+                    content = String(content[..<trailingNumberRange.lowerBound])
+                }
+                
+                // Remove references like [1], [2, 3], etc. using more comprehensive pattern
+                content = content.replacingOccurrences(of: "\\s*\\[\\d+(?:[-,]\\s*\\d+)*\\]\\s*", with: " ", options: .regularExpression)
                 
                 return (title: heading, content: content)
             } else {
                 // If no heading is found, remove any numbering and use as content
                 var content = direction.trimmingCharacters(in: .whitespacesAndNewlines)
                 
+                // Remove leading colon if present - handle multiple colons
+                while content.hasPrefix(":") {
+                    content = String(content.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                
                 // Remove any leading numbers (e.g., "1. ", "2. ")
                 if let numberRange = content.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
                     content = String(content[numberRange.upperBound...])
                 }
                 
-                return (title: "", content: content)
-            }
-        }
-    }
-}
-
-struct DirectionCardView: View {
-    let index: Int
-    let direction: (title: String, content: String)
-    let isSelected: Bool
-    let onTap: () -> Void
-    
-    private var gradient: LinearGradient {
-        LinearGradient(
-            colors: [Color.blue, Color.blue.opacity(0.7)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header with number and title
-            HStack(alignment: .center, spacing: 12) {
-                Text("\(index)")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(gradient))
-                    .shadow(color: Color.blue.opacity(0.3), radius: 2, x: 0, y: 1)
-                
-                if !direction.title.isEmpty {
-                    Text(direction.title)
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                        .fixedSize(horizontal: false, vertical: true)
+                // Remove trailing numbers that might be references
+                if let trailingNumberRange = content.range(of: "\\s+\\d+\\.?$", options: .regularExpression) {
+                    content = String(content[..<trailingNumberRange.lowerBound])
                 }
                 
-                Spacer()
+                // Remove references like [1], [2, 3], etc. using more comprehensive pattern
+                content = content.replacingOccurrences(of: "\\s*\\[\\d+(?:[-,]\\s*\\d+)*\\]\\s*", with: " ", options: .regularExpression)
                 
-                Image(systemName: isSelected ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .padding(8)
-                    .background(
-                        Circle()
-                            .fill(Color(.systemBackground))
-                            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
-                    )
-                    .rotationEffect(isSelected ? Angle(degrees: 0) : Angle(degrees: 0))
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+                return (title: "", content: content)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
-            .background(Color(.systemBackground))
-            
-            // Content
-            if isSelected {
-                Text(direction.content)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.systemBackground))
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity.combined(with: .move(edge: .top))
-                    ))
-            }
-        }
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-                .shadow(color: Color.black.opacity(isSelected ? 0.12 : 0.08), 
-                        radius: isSelected ? 6 : 4, 
-                        x: 0, 
-                        y: isSelected ? 3 : 2)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .scaleEffect(isSelected ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
-        .onTapGesture {
-            onTap()
         }
     }
 }

@@ -80,20 +80,11 @@ struct PosterScan: Identifiable, Codable {
         try container.encodeIfPresent(imageFilename, forKey: .imageFilename)
     }
     
-    // Create a new scan with updated questions
+    // Create a new scan with updated questions but preserve the original ID
     func withQuestions(_ questions: [String]) -> PosterScan {
-        var posterScan = PosterScan(
-            title: self.title,
-            rawText: self.rawText,
-            summaryPoints: self.summaryPoints,
-            image: self.image,
-            date: self.date,
-            authorQuestions: questions,
-            hasPermission: self.hasPermission
-        )
-        posterScan.researchContext = self.researchContext
-        posterScan.imageFilename = self.imageFilename
-        return posterScan
+        var updatedScan = self
+        updatedScan.authorQuestions = questions
+        return updatedScan
     }
     
     // Constructor with all properties
