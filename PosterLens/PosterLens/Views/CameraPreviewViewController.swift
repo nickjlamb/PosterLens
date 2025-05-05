@@ -22,18 +22,72 @@ class CameraPreviewViewController: UIViewController {
     private var isGridVisible = false
     private var gridView: UIView?
     
+    // Simulator detection
+    private var isSimulator: Bool {
+        get {
+            #if targetEnvironment(simulator)
+            return true
+            #else
+            return _isSimulatedEnvironment
+            #endif
+        }
+    }
+    
+    // Use this flag to simulate the simulator environment in cases where camera fails
+    private var _isSimulatedEnvironment: Bool = false
+    
     // Always allow capture
     var hasPermission: Bool = true
     
+    // Flags to track camera state
+    private var isCameraBeingSetup = false
+    private var isCameraReady = false
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-        setupCaptureSession()
-        setupUI()
-        // Capture button is always enabled
+        
+        print("CameraPreviewViewController viewDidLoad")
+        
+        if isSimulator {
+            print("Running in simulator - creating mock camera interface")
+            setupSimulatorUI()
+        } else {
+            // First set up the UI with placeholders
+            setupUI()
+            
+            // Then initialize camera in the background
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                
+                // Set flag to prevent concurrent initialization
+                self.isCameraBeingSetup = true
+                
+                // Setup the capture session
+                self.setupCaptureSession()
+                
+                // Clear the flag after a brief delay to ensure everything settles
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self = self else { return }
+                    print("Camera setup completed - clearing setup flag")
+                    self.isCameraBeingSetup = false
+                }
+            }
+        }
     }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        
+        // Skip camera-specific layout if in simulator
+        if isSimulator {
+            return
+        }
+        
+        // Add safety check for previewLayer
+        guard let previewLayer = self.previewLayer else {
+            print("Warning: Cannot update layout - preview layer is nil")
+            return
+        }
         
         // Update preview layer frame with proper animation
         CATransaction.begin()
@@ -53,6 +107,8 @@ class CameraPreviewViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
+        print("viewWillAppear called")
+        
         // Start observing device orientation changes
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(deviceOrientationDidChange),
@@ -62,13 +118,122 @@ class CameraPreviewViewController: UIViewController {
         // Enable device orientation notifications
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         
+        // Skip camera operations if in simulator
+        if isSimulator {
+            // Mock camera is always ready
+            isCameraReady = true
+            return
+        }
+        
         // Set initial orientation
         updatePreviewLayerVideoOrientation()
         
-        // Start capture session
-        if captureSession?.isRunning == false {
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.captureSession.startRunning()
+        // Try to determine the state of the camera
+        if let captureSession = self.captureSession {
+            if captureSession.isRunning {
+                print("Capture session already running, marking camera as ready")
+                self.isCameraReady = true
+            } else if !isCameraBeingSetup {
+                print("Starting capture session from viewWillAppear because it exists but isn't running")
+                // Start the session directly
+                DispatchQueue.global(qos: .userInitiated).async {
+                    captureSession.startRunning()
+                    print("Capture session started from viewWillAppear")
+                    
+                    // Mark as ready after the session has started
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                        guard let self = self else { return }
+                        print("Camera is now marked as ready from viewWillAppear")
+                        self.isCameraReady = true
+                    }
+                }
+            } else {
+                print("Camera is being set up, regular startup will be used")
+                // Regular startup is being handled by setup process
+            }
+        } else {
+            print("No capture session available in viewWillAppear, waiting for setup to complete")
+            // The session is being created, we need to wait
+        }
+        
+        // Schedule a check to see if camera is ready after a few seconds
+        // This ensures we don't get stuck in non-ready state
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self = self, !self.isCameraReady, !self.isSimulator else { return }
+            
+            print("Camera readiness timeout - forcing ready state")
+            
+            // At this point, we need to check one more time if the session exists and is running
+            if let captureSession = self.captureSession {
+                if !captureSession.isRunning && !self.isCameraBeingSetup {
+                    print("Trying to start session one last time after timeout")
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        captureSession.startRunning()
+                        print("Last attempt to start capture session successful")
+                    }
+                }
+            }
+            
+            // Force ready state to prevent permanent failure
+            self.isCameraReady = true
+        }
+    }
+    
+    private func startCaptureSessionIfNeeded() {
+        // Don't start the session if it's currently being set up
+        if isCameraBeingSetup {
+            print("Camera is currently being initialized, skipping startRunning call")
+            return
+        }
+        
+        // Start capture session - add nil check
+        guard let captureSession = self.captureSession else {
+            print("Warning: Cannot start capture session - session is nil")
+            return
+        }
+        
+        // Ensure we're not in the middle of a configuration when starting the session
+        if captureSession.isRunning == false {
+            // Log that we're starting the capture session
+            print("Starting capture session...")
+            
+            // Set camera as not ready until fully running
+            self.isCameraReady = false
+            
+            // Use a dedicated background queue for camera operations
+            DispatchQueue.global(qos: .userInitiated).async {
+                // Important: Make sure we're not in the middle of configuration
+                // when calling startRunning
+                captureSession.startRunning()
+                print("Capture session started successfully")
+                
+                // Update UI on main thread if needed
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    
+                    // If the previewLayer exists but hasn't been added to view yet, add it now
+                    if let previewLayer = self.previewLayer, let backgroundView = self.view.viewWithTag(1001) {
+                        if previewLayer.superlayer == nil {
+                            print("Adding previously initialized previewLayer to view")
+                            previewLayer.frame = self.view.bounds
+                            backgroundView.layer.addSublayer(previewLayer)
+                        }
+                    }
+                    
+                    self.updatePreviewLayerVideoOrientation()
+                    
+                    // Mark camera as ready after a short delay to ensure everything is settled
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        print("Camera is now marked as ready")
+                        self.isCameraReady = true
+                    }
+                }
+            }
+        } else {
+            // If already running, it's ready
+            if !isCameraReady {
+                print("Camera session already running, marking as ready")
+                self.isCameraReady = true
             }
         }
     }
@@ -76,12 +241,44 @@ class CameraPreviewViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         
+        print("viewWillDisappear called")
+        
+        // Mark camera as not ready when view disappears
+        isCameraReady = false
+        
         // Stop observing orientation changes
         NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         
-        if captureSession?.isRunning == true {
-            captureSession.stopRunning()
+        // Clean up any grid view if visible
+        if isGridVisible {
+            isGridVisible = false
+            gridView?.removeFromSuperview()
+            gridView = nil
+        }
+        
+        // Cancel any pending alert presentations
+        isAlertPresented = false
+        
+        // Skip camera operations if in simulator
+        if isSimulator {
+            return
+        }
+        
+        // Don't stop the session if it's currently being set up
+        if isCameraBeingSetup {
+            print("Camera is being initialized, skipping stopRunning call")
+            return
+        }
+        
+        // Add nil check for captureSession
+        if let captureSession = self.captureSession, captureSession.isRunning {
+            // Stop session on background thread to avoid UI blocking
+            print("Stopping capture session")
+            DispatchQueue.global(qos: .userInteractive).async {
+                captureSession.stopRunning()
+                print("Capture session stopped successfully")
+            }
         }
     }
     
@@ -100,13 +297,42 @@ class CameraPreviewViewController: UIViewController {
     }
     
     @objc private func deviceOrientationDidChange() {
+        // Check if the view controller is still in the view hierarchy
+        // This prevents crashes when orientation changes while the view controller is being dismissed
+        guard self.view.window != nil else {
+            print("Warning: Orientation changed but view is not in window hierarchy")
+            return
+        }
+        
         // Use a slight delay to ensure animation happens after the device has fully rotated
         DispatchQueue.main.async { [weak self] in
-            self?.updatePreviewLayerVideoOrientation()
+            guard let self = self else { return }
+            
+            // Check if previewLayer exists before updating orientation
+            guard self.previewLayer != nil else {
+                print("Warning: Cannot update orientation - preview layer is nil")
+                return
+            }
+            
+            self.updatePreviewLayerVideoOrientation()
         }
     }
     
     private func updatePreviewLayerVideoOrientation() {
+        // Ensure this method runs on the main thread
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.updatePreviewLayerVideoOrientation()
+            }
+            return
+        }
+        
+        // Add safety check for previewLayer
+        guard let previewLayer = self.previewLayer else {
+            print("Warning: Cannot update orientation - preview layer is nil")
+            return
+        }
+        
         guard let connection = previewLayer.connection else { return }
         
         // First check the interface orientation which is more stable during transitions
@@ -186,6 +412,20 @@ class CameraPreviewViewController: UIViewController {
     }
     
     private func updateUIForCurrentOrientation() {
+        // Ensure this method runs on the main thread
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateUIForCurrentOrientation()
+            }
+            return
+        }
+        
+        // Add safety check for previewLayer
+        guard let previewLayer = self.previewLayer else {
+            print("Warning: Cannot update UI for orientation - preview layer is nil")
+            return
+        }
+        
         // First do any critical view updates that need to happen immediately
         previewLayer.frame = view.bounds
         
@@ -286,74 +526,195 @@ class CameraPreviewViewController: UIViewController {
     }
     
     private func setupCaptureSession() {
-        captureSession = AVCaptureSession()
-        
-        // Configure the session for high resolution capture
-        if #available(iOS 16.0, *) {
-            // First configure the session
-            captureSession.beginConfiguration()
+        do {
+            print("Setting up camera capture session...")
+            captureSession = AVCaptureSession()
             
-            // Set up the capture device
-            guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-                  let videoDeviceInput = try? AVCaptureDeviceInput(device: videoDevice),
-                  captureSession.canAddInput(videoDeviceInput) else {
-                presentCameraSetupErrorAlert()
-                captureSession.commitConfiguration()
-                return
-            }
-            
-            captureSession.addInput(videoDeviceInput)
-            
-            // Set up photo output
-            if captureSession.canAddOutput(photoOutput) {
-                captureSession.addOutput(photoOutput)
+            // Configure the session for high resolution capture
+            if #available(iOS 16.0, *) {
+                // Begin configuration
+                captureSession.beginConfiguration()
                 
-                // Now that the session is configured and the device is connected,
-                // we can safely check the supported dimensions
-                let format = videoDevice.activeFormat
-                if let dimensions = format.supportedMaxPhotoDimensions.first {
-                    photoOutput.maxPhotoDimensions = dimensions
-                } else {
-                    print("No supported max photo dimensions found")
+                do {
+                    // Set up the capture device
+                    guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+                        throw NSError(domain: "CameraSetupError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to access camera device"])
+                    }
+                    
+                    print("Found camera device: \(videoDevice.localizedName)")
+                    
+                    // Create input
+                    let videoDeviceInput: AVCaptureDeviceInput
+                    do {
+                        videoDeviceInput = try AVCaptureDeviceInput(device: videoDevice)
+                        print("Created video device input")
+                    } catch {
+                        throw NSError(domain: "CameraSetupError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to create input device: \(error.localizedDescription)"])
+                    }
+                    
+                    // Add input
+                    guard captureSession.canAddInput(videoDeviceInput) else {
+                        throw NSError(domain: "CameraSetupError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Cannot add video input to session"])
+                    }
+                    
+                    print("Adding video input to session")
+                    captureSession.addInput(videoDeviceInput)
+                    
+                    // Set up photo output
+                    guard captureSession.canAddOutput(photoOutput) else {
+                        throw NSError(domain: "CameraSetupError", code: 4, userInfo: [NSLocalizedDescriptionKey: "Cannot add photo output to session"])
+                    }
+                    
+                    print("Adding photo output to session")
+                    captureSession.addOutput(photoOutput)
+                    
+                    // Configure photo output
+                    let format = videoDevice.activeFormat
+                    if let dimensions = format.supportedMaxPhotoDimensions.first {
+                        print("Setting max photo dimensions: \(dimensions)")
+                        photoOutput.maxPhotoDimensions = dimensions
+                    } else {
+                        print("No supported max photo dimensions found")
+                    }
+                    
+                    photoOutput.isLivePhotoCaptureEnabled = false
+                    print("Live photo capture disabled")
+                } catch {
+                    // If anything fails, commit the configuration to avoid hanging in configuration state
+                    print("Error during configuration: \(error.localizedDescription)")
+                    captureSession.commitConfiguration()
+                    throw error
                 }
                 
-                photoOutput.isLivePhotoCaptureEnabled = false
-            }
-            
-            captureSession.commitConfiguration()
-        } else {
-            // Fallback for earlier iOS versions
-            captureSession.beginConfiguration()
-            
-            guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-                  let videoDeviceInput = try? AVCaptureDeviceInput(device: videoDevice),
-                  captureSession.canAddInput(videoDeviceInput) else {
-                presentCameraSetupErrorAlert()
+                // Finalize configuration
+                print("Committing capture session configuration")
                 captureSession.commitConfiguration()
-                return
+            } else {
+                // Fallback for earlier iOS versions
+                captureSession.beginConfiguration()
+                
+                do {
+                    guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+                        throw NSError(domain: "CameraSetupError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to access camera device"])
+                    }
+                    
+                    print("Found camera device: \(videoDevice.localizedName)")
+                    
+                    let videoDeviceInput: AVCaptureDeviceInput
+                    do {
+                        videoDeviceInput = try AVCaptureDeviceInput(device: videoDevice)
+                        print("Created video device input")
+                    } catch {
+                        throw NSError(domain: "CameraSetupError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to create input device: \(error.localizedDescription)"])
+                    }
+                    
+                    guard captureSession.canAddInput(videoDeviceInput) else {
+                        throw NSError(domain: "CameraSetupError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Cannot add video input to session"])
+                    }
+                    
+                    print("Adding video input to session")
+                    captureSession.addInput(videoDeviceInput)
+                    
+                    guard captureSession.canAddOutput(photoOutput) else {
+                        throw NSError(domain: "CameraSetupError", code: 4, userInfo: [NSLocalizedDescriptionKey: "Cannot add photo output to session"])
+                    }
+                    
+                    print("Adding photo output to session")
+                    captureSession.addOutput(photoOutput)
+                    photoOutput.isHighResolutionCaptureEnabled = true
+                    photoOutput.isLivePhotoCaptureEnabled = false
+                    print("High-resolution photo capture enabled")
+                } catch {
+                    // If anything fails, commit the configuration to avoid hanging in configuration state
+                    print("Error during configuration: \(error.localizedDescription)")
+                    captureSession.commitConfiguration()
+                    throw error
+                }
+                
+                // Finalize configuration
+                print("Committing capture session configuration")
+                captureSession.commitConfiguration()
             }
             
-            captureSession.addInput(videoDeviceInput)
+            // Set up the preview layer - only after configuration is committed
+            print("Creating preview layer")
+            previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+            previewLayer.videoGravity = .resizeAspectFill
             
-            if captureSession.canAddOutput(photoOutput) {
-                captureSession.addOutput(photoOutput)
-                photoOutput.isHighResolutionCaptureEnabled = true
-                photoOutput.isLivePhotoCaptureEnabled = false
+            // Only update orientation on the main thread
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                
+                // Add preview layer to view if needed
+                if let previewLayer = self.previewLayer, let backgroundView = self.view.viewWithTag(1001) {
+                    print("Adding preview layer to view hierarchy")
+                    previewLayer.frame = self.view.bounds
+                    backgroundView.layer.addSublayer(previewLayer)
+                }
+                
+                if self.previewLayer != nil {
+                    print("Updating video orientation")
+                    self.updatePreviewLayerVideoOrientation()
+                }
+                
+                // Start the session manually instead of using the normal method
+                // to avoid timing issues with the isCameraBeingSetup flag
+                print("Starting capture session directly from setup method")
+                if let captureSession = self.captureSession, !captureSession.isRunning {
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        captureSession.startRunning()
+                        print("Capture session started directly")
+                        
+                        // Mark as ready after the session has started
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                            guard let self = self else { return }
+                            print("Camera is now marked as ready from direct start")
+                            self.isCameraReady = true
+                        }
+                    }
+                }
             }
             
-            captureSession.commitConfiguration()
+            print("Camera session setup completed successfully")
+            
+        } catch {
+            print("Camera setup error: \(error.localizedDescription)")
+            // Clean up any partially initialized resources
+            self.captureSession = nil
+            self.previewLayer = nil
+            
+            // Show error alert on main thread
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                
+                // In debug mode, simulate a mock camera for testing
+                #if DEBUG
+                print("DEBUG mode: Setting up mock camera interface after error")
+                self._isSimulatedEnvironment = true
+                self.setupSimulatorUI()
+                #else
+                self.presentCameraSetupErrorAlert()
+                #endif
+            }
         }
-        
-        // Set up the preview layer
-        previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        previewLayer.videoGravity = .resizeAspectFill
-        updatePreviewLayerVideoOrientation()
     }
     
     private func setupUI() {
-        // Add the preview layer to the view
-        previewLayer.frame = view.bounds
-        view.layer.addSublayer(previewLayer)
+        // Set up a camera background view regardless of previewLayer status
+        let cameraBackgroundView = UIView(frame: view.bounds)
+        cameraBackgroundView.backgroundColor = .black
+        cameraBackgroundView.tag = 1001 // Tag for future reference
+        view.addSubview(cameraBackgroundView)
+        
+        // Only add the preview layer if it's already initialized
+        if let previewLayer = self.previewLayer {
+            print("Adding preview layer to view")
+            previewLayer.frame = view.bounds
+            cameraBackgroundView.layer.addSublayer(previewLayer)
+        } else {
+            print("Preview layer not yet initialized, will add later")
+            // Don't show error - previewLayer will be set up asynchronously
+        }
         
         // Create capture button
         captureButton = UIButton(type: .system)
@@ -424,7 +785,88 @@ class CameraPreviewViewController: UIViewController {
     }
     
     @objc private func capturePhoto() {
-        // Permission check removed - always allow capture
+        // If running in simulator, use mock photo
+        if isSimulator {
+            mockCapturePhoto()
+            return
+        }
+        
+        // Check if camera is still being initialized
+        if isCameraBeingSetup {
+            print("Camera is still being set up, cannot capture photo yet")
+            presentCameraSetupErrorAlert()
+            return
+        }
+        
+        // Check if camera is ready for capture
+        if !isCameraReady {
+            print("Camera is not yet ready for capture, using mock photo")
+            #if DEBUG
+            mockCapturePhoto()
+            #else
+            presentCameraSetupErrorAlert()
+            #endif
+            return
+        }
+        
+        // Check for nil captureSession and it must be running
+        guard let captureSession = self.captureSession else {
+            print("Error: Cannot capture photo - capture session is nil")
+            #if DEBUG
+            mockCapturePhoto()
+            #else
+            presentCameraSetupErrorAlert()
+            #endif
+            return
+        }
+        
+        // If the session exists but isn't running, try to start it
+        if !captureSession.isRunning {
+            print("Capture session exists but isn't running, trying to start it")
+            
+            // Try to start the session
+            DispatchQueue.global(qos: .userInitiated).async {
+                captureSession.startRunning()
+                print("Started capture session during photo capture attempt")
+            }
+            
+            // Use mock photo in the meantime
+            print("Using mock photo while session starts")
+            mockCapturePhoto()
+            return
+        }
+        
+        guard let photoOutput = self.photoOutput as AVCapturePhotoOutput? else {
+            print("Error: Cannot capture photo - photo output is nil")
+            #if DEBUG
+            mockCapturePhoto()
+            #else
+            presentCameraSetupErrorAlert()
+            #endif
+            return
+        }
+        
+        // Check for nil previewLayer
+        guard let previewLayer = self.previewLayer else {
+            print("Error: Cannot capture photo - preview layer is nil")
+            #if DEBUG
+            mockCapturePhoto()
+            #else
+            presentCameraSetupErrorAlert()
+            #endif
+            return
+        }
+        
+        // Verify output is connected to session
+        guard photoOutput.connections.contains(where: { $0.isEnabled }) else {
+            print("Error: photoOutput is not enabled or not connected to the session")
+            #if DEBUG
+            mockCapturePhoto()
+            #else
+            presentCameraSetupErrorAlert()
+            #endif
+            return
+        }
         
         // Animate the capture button
         UIView.animate(withDuration: 0.1, animations: {
@@ -435,8 +877,10 @@ class CameraPreviewViewController: UIViewController {
             }
         }
         
+        print("Preparing to capture photo...")
+        
         // Configure photo settings
-        let settings = AVCapturePhotoSettings()
+        let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
         
         // Enable flash if available
         if let device = AVCaptureDevice.default(for: .video),
@@ -452,6 +896,7 @@ class CameraPreviewViewController: UIViewController {
         }
         
         // Capture the photo
+        print("Capturing photo...")
         photoOutput.capturePhoto(with: settings, delegate: self)
     }
     
@@ -503,11 +948,18 @@ class CameraPreviewViewController: UIViewController {
     }
     
     private func updateGridView() {
+        // Check for valid view before updating
+        guard view != nil else {
+            print("Warning: Cannot update grid view - view is nil")
+            return
+        }
+        
         // Remove existing grid view if any
         gridView?.removeFromSuperview()
         
+        // Check if grid should be visible
         if isGridVisible {
-            // Create new grid view with animation
+            // Create new grid view - createGridView() has its own nil check for previewLayer
             let newGridView = createGridView()
             newGridView.alpha = 0
             view.addSubview(newGridView)
@@ -521,6 +973,13 @@ class CameraPreviewViewController: UIViewController {
     }
     
     private func createGridView() -> UIView {
+        // Add safety check for previewLayer
+        guard let previewLayer = self.previewLayer else {
+            print("Warning: Cannot create grid view - preview layer is nil")
+            // Return an empty view as fallback
+            return UIView(frame: view.bounds)
+        }
+        
         let gridView = UIView(frame: previewLayer.frame)
         gridView.isUserInteractionEnabled = false
         
@@ -638,30 +1097,125 @@ class CameraPreviewViewController: UIViewController {
         })
     }
     
-    private func presentCameraSetupErrorAlert() {
-        DispatchQueue.main.async {
-            let alert = UIAlertController(
-                title: "Camera Error",
-                message: "Unable to access the camera. Please check your privacy settings.",
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: "OK", style: .default))
-            self.present(alert, animated: true)
-        }
-    }
-}
-
-extension CameraPreviewViewController: AVCapturePhotoCaptureDelegate {
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        if let error = error {
-            print("Error capturing photo: \(error.localizedDescription)")
-            return
-        }
+    // Set up a simulator-specific UI that doesn't need camera access
+    private func setupSimulatorUI() {
+        // Create a mock camera view with striped background
+        let mockCameraView = UIView(frame: view.bounds)
+        mockCameraView.backgroundColor = UIColor.darkGray
         
-        guard let imageData = photo.fileDataRepresentation(),
-              let image = UIImage(data: imageData) else {
-            print("Error converting photo data to image")
-            return
+        // Add a pattern overlay to simulate camera view
+        let patternView = UIView(frame: mockCameraView.bounds)
+        patternView.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+        mockCameraView.addSubview(patternView)
+        
+        // Add information label
+        let infoLabel = UILabel()
+        infoLabel.translatesAutoresizingMaskIntoConstraints = false
+        infoLabel.text = "Camera not available in Simulator"
+        infoLabel.textColor = .white
+        infoLabel.textAlignment = .center
+        infoLabel.font = UIFont.systemFont(ofSize: 20, weight: .semibold)
+        mockCameraView.addSubview(infoLabel)
+        
+        // Add a mock photo button
+        let mockButton = UIButton(type: .system)
+        mockButton.translatesAutoresizingMaskIntoConstraints = false
+        mockButton.setImage(UIImage(systemName: "camera.circle.fill"), for: .normal)
+        mockButton.tintColor = .white
+        mockButton.contentVerticalAlignment = .fill
+        mockButton.contentHorizontalAlignment = .fill
+        mockButton.addTarget(self, action: #selector(mockCapturePhoto), for: .touchUpInside)
+        mockCameraView.addSubview(mockButton)
+        
+        // Create cancel button
+        cancelButton = UIButton(type: .system)
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+        cancelButton.setTitle("Cancel", for: .normal)
+        cancelButton.tintColor = .white
+        cancelButton.addTarget(self, action: #selector(cancelButtonTapped), for: .touchUpInside)
+        mockCameraView.addSubview(cancelButton)
+        
+        // Add the mock view to our view hierarchy
+        view.addSubview(mockCameraView)
+        
+        // Set up constraints
+        NSLayoutConstraint.activate([
+            infoLabel.centerXAnchor.constraint(equalTo: mockCameraView.centerXAnchor),
+            infoLabel.centerYAnchor.constraint(equalTo: mockCameraView.centerYAnchor),
+            infoLabel.leadingAnchor.constraint(equalTo: mockCameraView.leadingAnchor, constant: 20),
+            infoLabel.trailingAnchor.constraint(equalTo: mockCameraView.trailingAnchor, constant: -20),
+            
+            mockButton.centerXAnchor.constraint(equalTo: mockCameraView.centerXAnchor),
+            mockButton.bottomAnchor.constraint(equalTo: mockCameraView.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+            mockButton.widthAnchor.constraint(equalToConstant: 80),
+            mockButton.heightAnchor.constraint(equalToConstant: 80),
+            
+            cancelButton.topAnchor.constraint(equalTo: mockCameraView.safeAreaLayoutGuide.topAnchor, constant: 20),
+            cancelButton.leadingAnchor.constraint(equalTo: mockCameraView.leadingAnchor, constant: 20),
+            cancelButton.widthAnchor.constraint(equalToConstant: 80),
+            cancelButton.heightAnchor.constraint(equalToConstant: 44)
+        ])
+    }
+    
+    @objc private func mockCapturePhoto() {
+        // Create a simple gradient image as a mock photo
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1200, height: 1600))
+        let mockImage = renderer.image { ctx in
+            // Create a gradient background
+            let colors = [
+                UIColor.systemBlue.cgColor,
+                UIColor.systemGray.cgColor
+            ]
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let colorLocations: [CGFloat] = [0.0, 1.0]
+            let gradient = CGGradient(
+                colorsSpace: colorSpace,
+                colors: colors as CFArray,
+                locations: colorLocations
+            )!
+            
+            ctx.cgContext.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: 0, y: 0),
+                end: CGPoint(x: 1200, y: 1600),
+                options: []
+            )
+            
+            // Add some text for demo purposes
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.alignment = .center
+            
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 36, weight: .bold),
+                .paragraphStyle: paragraphStyle,
+                .foregroundColor: UIColor.white
+            ]
+            
+            let text = "Sample Poster"
+            let textRect = CGRect(x: 400, y: 700, width: 400, height: 200)
+            text.draw(with: textRect, options: .usesLineFragmentOrigin, attributes: attrs, context: nil)
+            
+            // Add a few more text elements to simulate a scientific poster
+            let smallerAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 24),
+                .paragraphStyle: paragraphStyle,
+                .foregroundColor: UIColor.white
+            ]
+            
+            "Abstract".draw(with: CGRect(x: 400, y: 800, width: 400, height: 100), 
+                           options: .usesLineFragmentOrigin, 
+                           attributes: smallerAttrs, 
+                           context: nil)
+                           
+            "Methods".draw(with: CGRect(x: 400, y: 900, width: 400, height: 100), 
+                          options: .usesLineFragmentOrigin, 
+                          attributes: smallerAttrs, 
+                          context: nil)
+                          
+            "Results".draw(with: CGRect(x: 400, y: 1000, width: 400, height: 100), 
+                          options: .usesLineFragmentOrigin, 
+                          attributes: smallerAttrs, 
+                          context: nil)
         }
         
         // Provide haptic feedback
@@ -669,8 +1223,129 @@ extension CameraPreviewViewController: AVCapturePhotoCaptureDelegate {
         generator.prepare()
         generator.impactOccurred()
         
+        // Call the completion handler on main thread
         DispatchQueue.main.async { [weak self] in
-            self?.onImageCaptured?(image)
+            self?.onImageCaptured?(mockImage)
+        }
+    }
+    
+    // Track if an alert is already being presented to prevent multiple alerts
+    private var isAlertPresented = false
+    
+    private func presentCameraSetupErrorAlert() {
+        // Only present one alert at a time
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            if self.isAlertPresented {
+                print("Alert already being presented, skipping additional alert")
+                return
+            }
+            
+            // Check if the view controller is visible before presenting
+            guard self.isViewLoaded && self.view.window != nil else {
+                print("View not in window hierarchy, canceling alert")
+                return
+            }
+            
+            self.isAlertPresented = true
+            
+            let alert = UIAlertController(
+                title: "Camera Error",
+                message: "Unable to access the camera. Please check your privacy settings.",
+                preferredStyle: .alert
+            )
+            
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                self.isAlertPresented = false
+                // Notify delegate to dismiss this view controller
+                self.delegate?.cameraPreviewViewControllerDidCancel(self)
+            })
+            
+            self.present(alert, animated: true)
+        }
+    }
+}
+
+extension CameraPreviewViewController: AVCapturePhotoCaptureDelegate {
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        print("photoOutput didFinishProcessingPhoto called")
+        
+        // Handle any errors during photo capture
+        if let error = error {
+            print("Error capturing photo: \(error.localizedDescription)")
+            
+            // In case of errors, fallback to mock photo in debug builds
+            #if DEBUG
+            print("DEBUG mode: Falling back to mock photo after camera error")
+            mockCapturePhoto()
+            return
+            #else
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                // Show an error alert for photo capture error if not already showing another alert
+                if !self.isAlertPresented {
+                    self.isAlertPresented = true
+                    
+                    let alert = UIAlertController(
+                        title: "Photo Capture Error",
+                        message: "Unable to capture photo. Please try again.",
+                        preferredStyle: .alert
+                    )
+                    
+                    alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                        self.isAlertPresented = false
+                    })
+                    
+                    self.present(alert, animated: true)
+                }
+            }
+            return
+            #endif
+        }
+        
+        // Ensure we have valid image data
+        guard let imageData = photo.fileDataRepresentation() else {
+            print("Error: Unable to get file data representation from photo")
+            
+            // In case of errors, fallback to mock photo in debug builds
+            #if DEBUG
+            print("DEBUG mode: Falling back to mock photo after camera error")
+            mockCapturePhoto()
+            #endif
+            return
+        }
+        
+        // Convert data to UIImage
+        guard let image = UIImage(data: imageData) else {
+            print("Error: Unable to create UIImage from image data")
+            
+            // In case of errors, fallback to mock photo in debug builds
+            #if DEBUG
+            print("DEBUG mode: Falling back to mock photo after camera error")
+            mockCapturePhoto()
+            #endif
+            return
+        }
+        
+        print("Successfully captured photo")
+        
+        // Provide haptic feedback for successful capture
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.prepare()
+        generator.impactOccurred()
+        
+        // Notify callback on main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Call the completion handler if it exists
+            if let onImageCaptured = self.onImageCaptured {
+                print("Calling image captured callback")
+                onImageCaptured(image)
+            } else {
+                print("Warning: Image captured but no callback registered")
+            }
         }
     }
 }

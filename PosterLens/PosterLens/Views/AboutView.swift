@@ -34,8 +34,8 @@ struct AboutView: View {
     
     // App version and build number
     private var appVersion: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        let version = "1.0" // Updated version number
+        let build = "2" // Updated build number
         return "Version \(version) (\(build))"
     }
     
