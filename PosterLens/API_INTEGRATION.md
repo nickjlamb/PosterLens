@@ -1,10 +1,11 @@
-# Perplexity API Integration in PosterLens
+# API Integration in PosterLens
 
-PosterLens uses the Perplexity Sonar Pro API for three primary functions:
+This document has been renamed to API_INTEGRATION.md to reflect the use of multiple API services.
 
-1. Generating structured summaries of scientific posters
-2. Providing interactive chat responses about poster content
-3. Finding related research papers (via the Related Research feature)
+PosterLens uses both the Perplexity Sonar Pro API and OpenAI's API for various features:
+
+1. Perplexity API: Generating structured summaries of scientific posters and finding related research
+2. OpenAI API: Providing interactive chat responses about poster content
 
 ## Poster Summary Generation
 
@@ -15,14 +16,15 @@ PosterLens extracts text from scientific posters using OCR and processes it thro
 - Results
 - Conclusions
 
-## Interactive Chat Integration
+## Interactive Chat Integration with OpenAI
 
-The app's chat feature leverages the Perplexity API to provide contextual responses to user questions about the poster content. This implementation:
+The app's chat feature leverages the OpenAI API to provide contextual responses to user questions about the poster content. This implementation:
 
 - Maintains conversation context across multiple messages
 - Caches poster content for efficient API usage
 - Provides suggested questions based on poster content
 - Generates responses that reference specific poster details
+- Allows users to provide their own OpenAI API key for access
 
 ## Prompt Engineering
 
@@ -79,17 +81,31 @@ func generateResponse(for posterScan: PosterScan, to question: String, previousM
 
 ## API Configuration
 
-The chat feature uses the following configuration for API calls:
+The chat feature uses the following configuration for OpenAI API calls:
 
 ```swift
 let requestBody: [String: Any] = [
-    "model": "sonar-pro", // Using Sonar Pro model for higher quality responses
+    "model": "gpt-3.5-turbo", // Using GPT-3.5 Turbo for better cost efficiency
     "messages": [
         ["role": "system", "content": "You are a helpful scientific assistant that specializes in answering questions about scientific posters. You provide clear, concise, and accurate information based on the poster's content."],
         ["role": "user", "content": prompt]
     ],
     "max_tokens": 1024,
     "temperature": 0.3 // Lower temperature for more focused, accurate responses
+]
+```
+
+For poster summaries and related research, the app uses the Perplexity Sonar Pro API with this configuration:
+
+```swift
+let requestBody: [String: Any] = [
+    "model": "sonar-pro", // Using Sonar Pro model for higher quality responses
+    "messages": [
+        ["role": "system", "content": "You are a scientific assistant that specializes in summarizing scientific posters into clear, concise bullet points. Focus on extracting key findings, methodology, and conclusions."],
+        ["role": "user", "content": prompt]
+    ],
+    "max_tokens": 1024,
+    "temperature": 0.2 // Lower temperature for more focused, factual responses
 ]
 ```
 
@@ -141,15 +157,26 @@ The Related Research feature also uses the Perplexity API to find scientific pap
 - Validates and enriches citations with PubMed metadata
 - Ensures all returned papers have working links and complete citation information
 
+## API Key Management
+
+For OpenAI integration, the app implements user-provided API key management:
+
+- Users provide their own OpenAI API key via a configuration screen
+- API key is securely stored in UserDefaults
+- Configuration view allows easy updating of the API key
+- Visual indicator shows when API key has been saved successfully
+- Automatic prompt to set up API key when first using the chat feature
+
 ## Live Implementation
 
 The app now implements full API integration:
 
-- Real-time responses from the Perplexity API
+- Real-time responses from both Perplexity and OpenAI APIs
 - Conversation history maintained across sessions
 - Context caching for improved performance
 - Error handling with user-friendly error messages
 - Loading indicators with haptic feedback
+- Visual indicators for API-powered responses
 
 ## API Response Processing
 

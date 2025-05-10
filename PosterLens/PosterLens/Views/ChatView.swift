@@ -10,9 +10,14 @@ struct ChatView: View {
     @State private var scrollProxy: ScrollViewProxy? = nil
     @State private var errorMessage: String?
     @State private var showingError: Bool = false
+    @State private var showingAPIKeySheet: Bool = false
+    @AppStorage("OpenAIAPIKey") private var apiKey: String = ""
     
     // Chat service for API communication
-    private let chatService = ChatService()
+    private let openAIChatService = OpenAIChatService()
+    
+    // Use OpenAI instead of Perplexity for more reliable integration
+    private let useOpenAI = true
     
     // Suggested questions based on the poster content
     @State private var suggestedQuestions: [String] = [
@@ -108,16 +113,33 @@ struct ChatView: View {
         }
         .navigationTitle("Ask About Poster")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarItems(trailing: Button(action: {
+            showingAPIKeySheet = true
+        }) {
+            Image(systemName: "key.fill")
+                .foregroundColor(DesignSystem.Colors.brandBlue)
+        })
         .alert("Error", isPresented: $showingError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "An unknown error occurred")
+        }
+        .sheet(isPresented: $showingAPIKeySheet) {
+            OpenAIConfigView()
         }
         .onDisappear {
             // Reset states when view disappears
             isAPICallInProgress = false
             isLoading = false
             print("🧹 Reset states on disappear")
+        }
+        .onAppear {
+            // Check if API key is set
+            if apiKey.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    showingAPIKeySheet = true
+                }
+            }
         }
     }
     
@@ -252,7 +274,7 @@ struct ChatView: View {
         HapticManager.shared.mediumImpact()
         
         // VERY IMPORTANT DEBUG - Add this to verify we're running the new code
-        print("🔄🔄🔄 ATTEMPTING REAL API CALL TO PERPLEXITY 🔄🔄🔄")
+        print("🔄🔄🔄 ATTEMPTING REAL API CALL TO OPENAI 🔄🔄🔄")
         
         // IMPORTANT DEBUG FLAG - Create special content to make it obvious we're using API
         let apiDebugPrefix = "🌟 API RESPONSE: "
@@ -260,8 +282,8 @@ struct ChatView: View {
         // Get all previous messages for context
         let previousMessages = conversation.messages
         
-        // Use the ChatService to generate a response
-        chatService.generateResponse(for: posterScan, to: text, previousMessages: previousMessages) { result in
+        // Use the OpenAI service to generate a response
+        openAIChatService.generateResponse(for: posterScan, to: text, previousMessages: previousMessages) { result in
             // Handle the response on the main thread
             DispatchQueue.main.async {
                 print("🔄 API callback received")
