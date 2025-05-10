@@ -1,5 +1,8 @@
 import SwiftUI
 
+// DEBUG FLAG - This will help us verify if API is working
+let isApiDebug = true
+
 struct SimpleChatView: View {
     let posterScan: PosterScan
     
