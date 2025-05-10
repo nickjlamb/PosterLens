@@ -226,6 +226,7 @@ struct ChatView: View {
     @State private var isAPICallInProgress: Bool = false
     
     // Send a message and get a response from the Perplexity API
+    // THIS VERSION MAKES IT OBVIOUS IN UI WHEN REAL API IS USED
     private func sendMessage() {
         print("🔍 sendMessage started")
         // Trim whitespace
@@ -253,6 +254,9 @@ struct ChatView: View {
         // VERY IMPORTANT DEBUG - Add this to verify we're running the new code
         print("🔄🔄🔄 ATTEMPTING REAL API CALL TO PERPLEXITY 🔄🔄🔄")
         
+        // IMPORTANT DEBUG FLAG - Create special content to make it obvious we're using API
+        let apiDebugPrefix = "🌟 API RESPONSE: "
+        
         // Get all previous messages for context
         let previousMessages = conversation.messages
         
@@ -266,8 +270,8 @@ struct ChatView: View {
                 case .success(let responseText):
                     print("📝 Received API response: \(responseText.prefix(30))...")
                     
-                    // Add the AI response
-                    let aiMessage = ChatMessage(content: responseText, sender: .ai)
+                    // Add the AI response with the special API debug prefix
+                    let aiMessage = ChatMessage(content: apiDebugPrefix + responseText, sender: .ai)
                     
                     // Add message to conversation
                     if let conversation = self.conversation {
@@ -287,9 +291,17 @@ struct ChatView: View {
                 case .failure(let error):
                     print("❌ API error: \(error.localizedDescription)")
                     
-                    // Show error message
-                    self.errorMessage = "Failed to get response: \(error.localizedDescription)"
+                    // Show error message but also add it to conversation for visibility
+                    let errorContent = "❌ API ERROR: \(error.localizedDescription)"
+                    self.errorMessage = errorContent
                     self.showingError = true
+                    
+                    // Add the error as a message so it's visible in chat history
+                    let errorMessage = ChatMessage(content: errorContent, sender: .ai)
+                    if let conversation = self.conversation {
+                        self.dataStore.addMessage(errorMessage, to: conversation.id)
+                        self.conversation = self.dataStore.getOrCreateConversation(for: self.posterScan.id)
+                    }
                     
                     // Error haptic
                     HapticManager.shared.error()
