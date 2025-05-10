@@ -26,6 +26,7 @@ struct PosterLensApp: App {
                 }
             }
             .animation(.easeInOut, value: showOnboarding)
+            .preferredColorScheme(.light) // Force light mode throughout the app
         }
     }
 }
