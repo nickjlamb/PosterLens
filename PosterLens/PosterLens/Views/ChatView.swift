@@ -251,6 +251,9 @@ struct ChatView: View {
         // Provide haptic feedback
         HapticManager.shared.mediumImpact()
         
+        // VERY IMPORTANT DEBUG - Add this to verify we're running the new code
+        print("🔄🔄🔄 ATTEMPTING REAL API CALL TO PERPLEXITY 🔄🔄🔄")
+        
         // Get all previous messages for context
         let previousMessages = conversation.messages
         
@@ -258,6 +261,8 @@ struct ChatView: View {
         chatService.generateResponse(for: posterScan, to: text, previousMessages: previousMessages) { result in
             // Handle the response on the main thread
             DispatchQueue.main.async {
+                print("🔄 API callback received")
+                
                 switch result {
                 case .success(let responseText):
                     print("📝 Received API response: \(responseText.prefix(30))...")
