@@ -159,13 +159,12 @@ The Related Research feature also uses the Perplexity API to find scientific pap
 
 ## API Key Management
 
-For OpenAI integration, the app implements user-provided API key management:
+For OpenAI integration, the app uses a developer-provided API key:
 
-- Users provide their own OpenAI API key via a configuration screen
-- API key is securely stored in UserDefaults
-- Configuration view allows easy updating of the API key
-- Visual indicator shows when API key has been saved successfully
-- Automatic prompt to set up API key when first using the chat feature
+- The OpenAI API key is embedded directly in the app code
+- No user configuration is required
+- Users can immediately use the chat feature without setup
+- API key is managed and rotated by the developer as needed
 
 ## Live Implementation
 

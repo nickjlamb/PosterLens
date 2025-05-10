@@ -10,8 +10,7 @@ struct ChatView: View {
     @State private var scrollProxy: ScrollViewProxy? = nil
     @State private var errorMessage: String?
     @State private var showingError: Bool = false
-    @State private var showingAPIKeySheet: Bool = false
-    @AppStorage("OpenAIAPIKey") private var apiKey: String = ""
+    // No longer need API key management
     
     // Chat service for API communication
     private let openAIChatService = OpenAIChatService()
@@ -113,33 +112,16 @@ struct ChatView: View {
         }
         .navigationTitle("Ask About Poster")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarItems(trailing: Button(action: {
-            showingAPIKeySheet = true
-        }) {
-            Image(systemName: "key.fill")
-                .foregroundColor(DesignSystem.Colors.brandBlue)
-        })
         .alert("Error", isPresented: $showingError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "An unknown error occurred")
         }
-        .sheet(isPresented: $showingAPIKeySheet) {
-            OpenAIConfigView()
-        }
         .onDisappear {
             // Reset states when view disappears
-            isAPICallInProgress = false
+            lastApiRequestTime = nil
             isLoading = false
             print("🧹 Reset states on disappear")
-        }
-        .onAppear {
-            // Check if API key is set
-            if apiKey.isEmpty {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    showingAPIKeySheet = true
-                }
-            }
         }
     }
     
@@ -244,8 +226,8 @@ struct ChatView: View {
         }
     }
     
-    // API response tracking (no more timers needed)
-    @State private var isAPICallInProgress: Bool = false
+    // Simplified state tracking
+    @State private var lastApiRequestTime: Date? = nil
     
     // Send a message and get a response from the Perplexity API
     // THIS VERSION MAKES IT OBVIOUS IN UI WHEN REAL API IS USED
@@ -276,8 +258,8 @@ struct ChatView: View {
         // VERY IMPORTANT DEBUG - Add this to verify we're running the new code
         print("🔄🔄🔄 ATTEMPTING REAL API CALL TO OPENAI 🔄🔄🔄")
         
-        // IMPORTANT DEBUG FLAG - Create special content to make it obvious we're using API
-        let apiDebugPrefix = "🌟 API RESPONSE: "
+        // Set the current timestamp for this API request
+        lastApiRequestTime = Date()
         
         // Get all previous messages for context
         let previousMessages = conversation.messages
@@ -292,8 +274,8 @@ struct ChatView: View {
                 case .success(let responseText):
                     print("📝 Received API response: \(responseText.prefix(30))...")
                     
-                    // Add the AI response with the special API debug prefix
-                    let aiMessage = ChatMessage(content: apiDebugPrefix + responseText, sender: .ai)
+                    // Add the AI response
+                    let aiMessage = ChatMessage(content: responseText, sender: .ai)
                     
                     // Add message to conversation
                     if let conversation = self.conversation {

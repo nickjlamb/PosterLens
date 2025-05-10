@@ -27,22 +27,17 @@ enum OpenAIError: Error, LocalizedError {
 }
 
 class OpenAIService {
-    // Default API key is empty - user must provide their own key
-    private let defaultAPIKey = ""  // Empty by default, requiring user to enter their own key
+    // Developer-provided API key - replace with your actual OpenAI key
+    private let defaultAPIKey = "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"  // Replace with your actual OpenAI API key
     var apiKey: String
     private let baseURL = "https://api.openai.com/v1/chat/completions"
     
-    // Initialize with API key from environment or configuration
+    // Initialize with the developer-provided API key
     init(apiKey: String? = nil) {
-        // First try to load from UserDefaults
-        if let savedKey = UserDefaults.standard.string(forKey: "OpenAIAPIKey"), !savedKey.isEmpty {
-            self.apiKey = savedKey
-        } else {
-            // Fall back to the default key
-            self.apiKey = defaultAPIKey
-        }
+        // Use the default API key that the developer provides
+        self.apiKey = defaultAPIKey
         
-        // If a specific key is provided, use that instead
+        // Optional override for testing or if key needs to be changed
         if let providedKey = apiKey, !providedKey.isEmpty {
             self.apiKey = providedKey
         }
@@ -55,10 +50,9 @@ class OpenAIService {
         return !apiKey.isEmpty && apiKey.hasPrefix("sk-")
     }
     
-    // Set API key (for internal use only, not exposed to users)
+    // Set API key (for testing or if key needs to be rotated)
     func setAPIKey(_ key: String) {
         apiKey = key
-        UserDefaults.standard.set(key, forKey: "OpenAIAPIKey")
     }
     
     // Generate a chat response based on a prompt
