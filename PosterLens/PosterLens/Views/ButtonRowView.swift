@@ -33,6 +33,12 @@ struct ContextButton: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+        case "Related Research":
+            self.gradient = LinearGradient(
+                colors: [Color.green, Color.green.opacity(0.6)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         default:
             self.gradient = LinearGradient(
                 colors: [Color.blue, Color.blue.opacity(0.6)],
@@ -133,7 +139,9 @@ struct ButtonRowView: View {
     @EnvironmentObject private var dataStore: DataStore
     @State private var showQuestionsView: Bool = false
     @State private var showDirectionsView: Bool = false
-    @State private var showChatView: Bool = false  // New state for chat view
+    @State private var showChatView: Bool = false
+    @State private var showOpenAIChatView: Bool = false  // New state for OpenAI chat view
+    @State private var showRelatedResearchView: Bool = false  // New state for related research view
     @State private var isGeneratingQuestions: Bool = false
     @State private var isGeneratingDirections: Bool = false
     @State private var questions: [String]?
@@ -151,64 +159,94 @@ struct ButtonRowView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
             
-            // Three columns of context buttons
-            HStack(spacing: 8) {
-                // First button: What to Ask the Author
-                ContextButton(
-                    title: "Questions to Ask",
-                    iconName: "questionmark.circle",
-                    action: {
-                        if scan.authorQuestions != nil {
-                            showQuestionsView = true
-                        } else {
-                            generateQuestions()
+            // Four columns of context buttons
+            VStack(spacing: 8) {
+                // First row of buttons
+                HStack(spacing: 8) {
+                    // First button: What to Ask the Author
+                    ContextButton(
+                        title: "Questions to Ask",
+                        iconName: "questionmark.circle",
+                        action: {
+                            if scan.authorQuestions != nil {
+                                showQuestionsView = true
+                            } else {
+                                generateQuestions()
+                            }
                         }
-                    }
-                )
-                .overlay(
-                    Group {
-                        if isGeneratingQuestions {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .padding(8)
-                                .background(Color(.systemBackground).opacity(0.8))
-                                .cornerRadius(8)
+                    )
+                    .overlay(
+                        Group {
+                            if isGeneratingQuestions {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                                    .padding(8)
+                                    .background(Color(.systemBackground).opacity(0.8))
+                                    .cornerRadius(8)
+                            }
                         }
-                    }
-                )
+                    )
+                    
+                    // Second button: Research Directions
+                    ContextButton(
+                        title: "Research Directions",
+                        iconName: "arrow.up.forward.circle",
+                        action: {
+                            if scan.researchContext?.futureDirections != nil {
+                                showDirectionsView = true
+                            } else {
+                                generateFutureDirections()
+                            }
+                        }
+                    )
+                    .overlay(
+                        Group {
+                            if isGeneratingDirections {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                                    .padding(8)
+                                    .background(Color(.systemBackground).opacity(0.8))
+                                    .cornerRadius(8)
+                            }
+                        }
+                    )
+                }
                 
-                // Second button: Research Directions
-                ContextButton(
-                    title: "Research Directions",
-                    iconName: "arrow.up.forward.circle",
-                    action: {
-                        if scan.researchContext?.futureDirections != nil {
-                            showDirectionsView = true
-                        } else {
-                            generateFutureDirections()
+                // Second row of buttons
+                HStack(spacing: 8) {
+                    // Third button: Perplexity Chat
+                    ContextButton(
+                        title: "Perplexity Chat",
+                        iconName: "bubble.left.fill",
+                        action: {
+                            showChatView = true
                         }
-                    }
-                )
-                .overlay(
-                    Group {
-                        if isGeneratingDirections {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .padding(8)
-                                .background(Color(.systemBackground).opacity(0.8))
-                                .cornerRadius(8)
+                    )
+                    
+                    // Fourth button: OpenAI Chat
+                    ContextButton(
+                        title: "OpenAI Chat",
+                        iconName: "bubble.right.fill",
+                        action: {
+                            showOpenAIChatView = true
                         }
-                    }
-                )
+                    )
+                }
                 
-                // New button: Chat with AI
-                ContextButton(
-                    title: "Chat with AI",
-                    iconName: "bubble.left.and.bubble.right.fill",
-                    action: {
-                        showChatView = true
-                    }
-                )
+                // Third row of buttons
+                HStack(spacing: 8) {
+                    // Related Research button
+                    ContextButton(
+                        title: "Related Research",
+                        iconName: "doc.text.magnifyingglass",
+                        action: {
+                            showRelatedResearchView = true
+                        }
+                    )
+                    
+                    // Placeholder for symmetry - empty space
+                    Spacer()
+                }
             }
             .frame(maxWidth: .infinity) // Ensure HStack takes full width
             .padding(.horizontal, 4)
@@ -253,6 +291,14 @@ struct ButtonRowView: View {
         }
         .navigationDestination(isPresented: $showChatView) {
             SimpleChatView(posterScan: scan)
+                .environmentObject(dataStore)
+        }
+        .navigationDestination(isPresented: $showOpenAIChatView) {
+            OpenAIChatView(posterScan: scan)
+                .environmentObject(dataStore)
+        }
+        .navigationDestination(isPresented: $showRelatedResearchView) {
+            RelatedResearchView(posterScan: scan)
                 .environmentObject(dataStore)
         }
         .alert(isPresented: $showingError) {

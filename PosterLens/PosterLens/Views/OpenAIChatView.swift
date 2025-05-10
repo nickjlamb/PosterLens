@@ -1,0 +1,370 @@
+import SwiftUI
+
+struct OpenAIChatView: View {
+    let posterScan: PosterScan
+    
+    @EnvironmentObject private var dataStore: DataStore
+    @State private var messageText: String = ""
+    @State private var conversation: Conversation?
+    @State private var isLoading: Bool = false
+    @State private var scrollProxy: ScrollViewProxy? = nil
+    @State private var errorMessage: String?
+    @State private var showingError: Bool = false
+    
+    // Chat service for API communication
+    private let openAIChatService = OpenAIChatService()
+    
+    // Suggested questions based on the poster content
+    @State private var suggestedQuestions: [String] = [
+        "What are the key findings of this research?",
+        "What methods were used in this study?",
+        "What are the limitations of this research?",
+        "How does this compare to other work in the field?",
+        "What are the practical applications of this research?"
+    ]
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Messages area
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 8) {
+                        // Welcome message - always show at start
+                        if let conversation = conversation, conversation.messages.isEmpty {
+                            welcomeMessage
+                        }
+                        
+                        // Message bubbles - only when there are actual messages
+                        ForEach(conversation?.messages ?? []) { message in
+                            MessageBubble(message: message)
+                                .id(message.id)
+                        }
+                        
+                        // Show loading indicator when waiting for a response
+                        if isLoading {
+                            HStack {
+                                Spacer()
+                                LoadingBubble()
+                                    .id("loadingBubble")
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                    .padding(.top, 10)
+                    .padding(.bottom, 10)
+                }
+                .onAppear {
+                    self.scrollProxy = proxy
+                    // Load or create conversation
+                    let convo = dataStore.getOrCreateConversation(for: posterScan.id)
+                    self.conversation = convo
+                }
+                .onChange(of: conversation?.messages.count) { newCount in
+                    // Log message count change
+                    print("📊 Message count changed to: \(newCount ?? 0)")
+                    
+                    // Scroll to bottom when messages change
+                    withAnimation {
+                        if let lastMessage = conversation?.messages.last {
+                            print("📜 Scrolling to message: \(lastMessage.content.prefix(20))...")
+                            scrollProxy?.scrollTo(lastMessage.id, anchor: .bottom)
+                        } else if isLoading {
+                            print("📜 Scrolling to loading bubble")
+                            scrollProxy?.scrollTo("loadingBubble", anchor: .bottom)
+                        }
+                    }
+                }
+            }
+            .background(Color(.systemGray6))
+            
+            // Suggested questions chips
+            // Always show at the start, hide after a few messages
+            if let conversation = conversation, conversation.messages.count < 4 {
+                suggestedQuestionsView
+            }
+            
+            // Input area
+            HStack(spacing: 12) {
+                TextField("Ask a question about this poster...", text: $messageText)
+                    .padding(10)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(20)
+                    .disabled(isLoading)
+                
+                Button(action: {
+                    print("🔘 Send button tapped with text: \(messageText)")
+                    sendMessage()
+                }) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundColor(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading ? .gray : DesignSystem.Colors.brandBlue)
+                }
+                .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .background(Color.white)
+            .shadow(color: Color.black.opacity(0.1), radius: 5, y: -2)
+        }
+        .navigationTitle("Ask About Poster (OpenAI)")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Error", isPresented: $showingError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "An unknown error occurred")
+        }
+        .onDisappear {
+            // Reset states when view disappears
+            isLoading = false
+            print("🧹 Reset states on disappear")
+        }
+    }
+    
+    // Welcome message at the start of conversation
+    private var welcomeMessage: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Ask about \"\(posterScan.title)\"")
+                .font(.headline)
+                .foregroundColor(.primary)
+                .padding(.horizontal)
+            
+            Text("I can answer questions about this poster based on its content. Tap a suggested question below or type your own.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+            
+            // Add visual cue pointing to suggested questions
+            HStack {
+                Spacer()
+                VStack(spacing: 6) {
+                    Text("Suggested questions below")
+                        .font(.caption)
+                        .foregroundColor(DesignSystem.Colors.brandBlue)
+                        .fontWeight(.medium)
+                    
+                    Image(systemName: "arrow.down")
+                        .foregroundColor(DesignSystem.Colors.brandBlue)
+                        .font(.caption)
+                }
+                Spacer()
+            }
+            .padding(.top, 10)
+            
+            Divider()
+                .padding(.vertical, 5)
+        }
+        .padding(.vertical)
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 3, y: 1)
+        .padding(.horizontal)
+    }
+    
+    // Suggested questions chips
+    private var suggestedQuestionsView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Section title
+            Text("Suggested Questions")
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(suggestedQuestions, id: \.self) { question in
+                        Button(action: {
+                            print("🔘 Suggested question button tapped: \(question)")
+                            messageText = question
+                            sendMessage()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "questionmark.circle.fill")
+                                    .font(.system(size: 14))
+                                
+                                Text(question)
+                                    .font(.callout)
+                                    .lineLimit(2)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18)
+                                    .fill(Color.white)
+                                    .shadow(color: Color.black.opacity(0.1), radius: 3, y: 2)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18)
+                                    .stroke(DesignSystem.Colors.brandBlue.opacity(0.3), lineWidth: 1)
+                            )
+                            .foregroundColor(DesignSystem.Colors.brandBlue)
+                        }
+                        .buttonStyle(PressableQuestionStyle())
+                        .disabled(isLoading)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+        }
+        .background(Color(.systemGray6))
+    }
+    
+    // Custom button style for question chips
+    struct PressableQuestionStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.95 : 1)
+                .brightness(configuration.isPressed ? 0.05 : 0)
+                .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
+        }
+    }
+    
+    // Send a message and get a response from the OpenAI API
+    private func sendMessage() {
+        print("🔍 OpenAIChatView.sendMessage started")
+        // Trim whitespace
+        let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isLoading, let conversation = conversation else { 
+            print("❌ Guard condition failed in sendMessage")
+            return 
+        }
+        
+        print("✅ Adding user message: \(text)")
+        // Create and add user message
+        let userMessage = ChatMessage(content: text, sender: .user)
+        dataStore.addMessage(userMessage, to: conversation.id)
+        
+        // Clear input field
+        messageText = ""
+        
+        // Start loading state
+        isLoading = true
+        print("⏳ Loading state started")
+        
+        // Provide haptic feedback
+        HapticManager.shared.mediumImpact()
+        
+        // Log the API call
+        print("🔄🔄🔄 MAKING OPENAI API CALL 🔄🔄🔄")
+        
+        // Get all previous messages for context
+        let previousMessages = conversation.messages
+        
+        // Use the OpenAI service to generate a response
+        openAIChatService.generateResponse(for: posterScan, to: text, previousMessages: previousMessages) { result in
+            // Handle the response on the main thread
+            DispatchQueue.main.async {
+                print("🔄 OpenAI API callback received")
+                
+                switch result {
+                case .success(let responseText):
+                    print("📝 Received OpenAI API response: \(responseText.prefix(30))...")
+                    
+                    // Add the AI response with a prefix to indicate it's from OpenAI
+                    let aiMessage = ChatMessage(content: "💬 [OpenAI] " + responseText, sender: .ai)
+                    
+                    // Add message to conversation
+                    if let conversation = self.conversation {
+                        print("💾 Adding AI message to conversation")
+                        self.dataStore.addMessage(aiMessage, to: conversation.id)
+                        
+                        // Refresh the conversation to force UI update
+                        print("🔄 Refreshing conversation")
+                        self.conversation = self.dataStore.getOrCreateConversation(for: self.posterScan.id)
+                        
+                        // Success haptic
+                        HapticManager.shared.success()
+                    } else {
+                        print("❌ Conversation was nil when handling API response")
+                    }
+                    
+                case .failure(let error):
+                    print("❌ OpenAI API error: \(error.localizedDescription)")
+                    
+                    // Show error message but also add it to conversation for visibility
+                    let errorContent = "❌ OpenAI API ERROR: \(error.localizedDescription)"
+                    self.errorMessage = errorContent
+                    self.showingError = true
+                    
+                    // Add the error as a message so it's visible in chat history
+                    let errorMessage = ChatMessage(content: errorContent, sender: .ai)
+                    if let conversation = self.conversation {
+                        self.dataStore.addMessage(errorMessage, to: conversation.id)
+                        self.conversation = self.dataStore.getOrCreateConversation(for: self.posterScan.id)
+                    }
+                    
+                    // Error haptic
+                    HapticManager.shared.error()
+                }
+                
+                // End loading state
+                print("✅ Ending loading state")
+                self.isLoading = false
+            }
+        }
+    }
+}
+
+// Reusing message bubble component from ChatView
+struct MessageBubble: View {
+    let message: ChatMessage
+    
+    var body: some View {
+        HStack {
+            if message.sender == .user {
+                Spacer()
+                Text(message.content)
+                    .padding(12)
+                    .background(DesignSystem.Colors.brandBlue)
+                    .foregroundColor(.white)
+                    .cornerRadius(18)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .padding(.leading, 60)
+                    .padding(.trailing, 16)
+            } else {
+                Text(message.content)
+                    .padding(12)
+                    .background(Color.white)
+                    .foregroundColor(.primary)
+                    .cornerRadius(18)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .shadow(color: Color.black.opacity(0.05), radius: 2, y: 1)
+                    .padding(.leading, 16)
+                    .padding(.trailing, 60)
+                Spacer()
+            }
+        }
+    }
+}
+
+// Reusing loading animation bubble from ChatView
+struct LoadingBubble: View {
+    @State private var isAnimating = false
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<3) { index in
+                Circle()
+                    .fill(DesignSystem.Colors.brandBlue.opacity(0.7))
+                    .frame(width: 10, height: 10)
+                    .scaleEffect(isAnimating ? 1.3 : 0.7)
+                    .opacity(isAnimating ? 1.0 : 0.4)
+                    .animation(
+                        Animation.easeInOut(duration: 0.5)
+                            .repeatForever(autoreverses: true)
+                            .delay(0.15 * Double(index)),
+                        value: isAnimating
+                    )
+            }
+        }
+        .padding(14)
+        .background(Color.white)
+        .cornerRadius(18)
+        .shadow(color: Color.black.opacity(0.1), radius: 3, y: 2)
+        .onAppear {
+            isAnimating = true
+        }
+    }
+}
