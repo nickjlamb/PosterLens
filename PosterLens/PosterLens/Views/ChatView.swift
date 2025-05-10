@@ -114,10 +114,10 @@ struct ChatView: View {
             Text(errorMessage ?? "An unknown error occurred")
         }
         .onDisappear {
-            // Clean up timers when view disappears
-            responseTimer?.invalidate()
-            responseTimer = nil
-            print("🧹 Cleaned up timers on disappear")
+            // Reset states when view disappears
+            isAPICallInProgress = false
+            isLoading = false
+            print("🧹 Reset states on disappear")
         }
     }
     
@@ -222,9 +222,8 @@ struct ChatView: View {
         }
     }
     
-    // Keep track of the timer for generating responses
-    @State private var responseTimer: Timer? = nil
-    @State private var responseText: String = ""
+    // API response tracking (no more timers needed)
+    @State private var isAPICallInProgress: Bool = false
     
     // Send a message and get a response from the Perplexity API
     private func sendMessage() {
