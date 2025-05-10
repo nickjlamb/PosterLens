@@ -226,7 +226,7 @@ struct ChatView: View {
     @State private var responseTimer: Timer? = nil
     @State private var responseText: String = ""
     
-    // Send a message and get a response with a simpler approach
+    // Send a message and get a response from the Perplexity API
     private func sendMessage() {
         print("🔍 sendMessage started")
         // Trim whitespace
@@ -241,9 +241,8 @@ struct ChatView: View {
         let userMessage = ChatMessage(content: text, sender: .user)
         dataStore.addMessage(userMessage, to: conversation.id)
         
-        // Clear input field and prepare response
+        // Clear input field
         messageText = ""
-        responseText = ""
         
         // Start loading state
         isLoading = true
@@ -251,53 +250,50 @@ struct ChatView: View {
         
         // Provide haptic feedback
         HapticManager.shared.mediumImpact()
-
-        // Generate an appropriate response based on the content
-        if text.lowercased().contains("method") || text.lowercased().contains("methodology") {
-            responseText = "Based on the poster, this research used \(posterScan.summaryPoints.first(where: { $0.lowercased().contains("method") || $0.lowercased().contains("methodology") }) ?? "experimental methodology with controlled variables and data collection over time. The specific techniques included statistical analysis and comparative assessment.")."
-        } else if text.lowercased().contains("finding") || text.lowercased().contains("result") {
-            responseText = "The key findings from this poster indicate \(posterScan.summaryPoints.first(where: { $0.lowercased().contains("result") || $0.lowercased().contains("finding") }) ?? "significant outcomes that support the primary hypothesis. The data demonstrates consistent patterns across multiple test conditions.")."
-        } else if text.lowercased().contains("conclusion") || text.lowercased().contains("implication") {
-            responseText = "The researchers concluded that \(posterScan.summaryPoints.first(where: { $0.lowercased().contains("conclusion") || $0.lowercased().contains("implication") }) ?? "the results have important implications for future work in this field. The outcomes suggest several potential applications and directions for continued research.")."
-        } else if text.lowercased().contains("limitation") {
-            let limitationText = posterScan.authorQuestions?.first(where: { $0.lowercased().contains("limitation") }) ?? "potential sampling constraints, limited time frame for data collection, and the specific context in which the study was conducted. These factors should be considered when interpreting the results."
-            responseText = "Some limitations of this research include \(limitationText)."
-        } else {
-            responseText = "Based on the poster content, this research focused on \(posterScan.title). The study identified important findings related to this topic through careful methodology and analysis. The poster highlights several key points including \(posterScan.summaryPoints.first ?? "the main research questions and findings") which contribute to our understanding of this field."
-        }
         
-        print("📝 Generated response: \(responseText.prefix(30))...")
+        // Get all previous messages for context
+        let previousMessages = conversation.messages
         
-        // Cancel any existing timer
-        responseTimer?.invalidate()
-        
-        // Schedule a timer to add the response after a delay
-        responseTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { _ in
-            print("⏰ Timer fired - adding AI response")
-            
-            // Add the AI response
-            let aiMessage = ChatMessage(content: self.responseText, sender: .ai)
-            
-            // We must update UI on main thread
+        // Use the ChatService to generate a response
+        chatService.generateResponse(for: posterScan, to: text, previousMessages: previousMessages) { result in
+            // Handle the response on the main thread
             DispatchQueue.main.async {
-                // Add message to conversation
-                if let conversation = self.conversation {
-                    print("💾 Adding AI message to conversation")
-                    self.dataStore.addMessage(aiMessage, to: conversation.id)
+                switch result {
+                case .success(let responseText):
+                    print("📝 Received API response: \(responseText.prefix(30))...")
                     
-                    // Refresh the conversation to force UI update
-                    print("🔄 Refreshing conversation")
-                    self.conversation = self.dataStore.getOrCreateConversation(for: self.posterScan.id)
+                    // Add the AI response
+                    let aiMessage = ChatMessage(content: responseText, sender: .ai)
                     
-                    // Success haptic
-                    HapticManager.shared.success()
+                    // Add message to conversation
+                    if let conversation = self.conversation {
+                        print("💾 Adding AI message to conversation")
+                        self.dataStore.addMessage(aiMessage, to: conversation.id)
+                        
+                        // Refresh the conversation to force UI update
+                        print("🔄 Refreshing conversation")
+                        self.conversation = self.dataStore.getOrCreateConversation(for: self.posterScan.id)
+                        
+                        // Success haptic
+                        HapticManager.shared.success()
+                    } else {
+                        print("❌ Conversation was nil when handling API response")
+                    }
                     
-                    // End loading state
-                    print("✅ Ending loading state")
-                    self.isLoading = false
-                } else {
-                    print("❌ Conversation was nil when timer fired")
+                case .failure(let error):
+                    print("❌ API error: \(error.localizedDescription)")
+                    
+                    // Show error message
+                    self.errorMessage = "Failed to get response: \(error.localizedDescription)"
+                    self.showingError = true
+                    
+                    // Error haptic
+                    HapticManager.shared.error()
                 }
+                
+                // End loading state
+                print("✅ Ending loading state")
+                self.isLoading = false
             }
         }
     }
