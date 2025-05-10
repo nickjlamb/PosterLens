@@ -60,17 +60,15 @@ class ChatService {
         ]
         
         // Debug logging - check API key
-        print("🚀 Using API key: \(perplexityService.apiKey)")
+        print("🚀 Using API key: \(perplexityService.apiKey.prefix(8))...") // Only log prefix for security
         
         // Serialize the request body
         do {
             let requestData = try JSONSerialization.data(withJSONObject: requestBody)
             request.httpBody = requestData
             
-            // Debug logging - print request
-            if let requestStr = String(data: requestData, encoding: .utf8) {
-                print("📤 API Request: \(requestStr)")
-            }
+            // Debug logging - print request without sensitive data
+            print("📤 API Request sent to Perplexity - model: sonar-pro, max_tokens: 1024")
         } catch {
             let errorMessage = "Failed to serialize request: \(error.localizedDescription)"
             print("❌ Serialization error: \(errorMessage)")
@@ -98,10 +96,8 @@ class ChatService {
                 return
             }
             
-            // Debug data received
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📥 API Response data: \(responseString)")
-            }
+            // Debug that data was received (without exposing full content)
+            print("📥 API Response received (\(data.count) bytes)")
             
             // Process the response
             do {
