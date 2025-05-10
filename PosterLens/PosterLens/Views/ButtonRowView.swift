@@ -214,28 +214,23 @@ struct ButtonRowView: View {
                 
                 // Second row of buttons
                 HStack(spacing: 8) {
-                    // Third button: Perplexity Chat
+                    // Third button: Chat with AI (now OpenAI)
                     ContextButton(
-                        title: "Perplexity Chat",
-                        iconName: "bubble.left.fill",
-                        action: {
-                            showChatView = true
-                        }
-                    )
-                    
-                    // Fourth button: OpenAI Chat
-                    ContextButton(
-                        title: "OpenAI Chat",
-                        iconName: "bubble.right.fill",
+                        title: "Chat with AI",
+                        iconName: "bubble.left.and.bubble.right.fill",
                         action: {
                             showOpenAIChatView = true
                         }
                     )
-                }
-                
-                // Third row of buttons
-                HStack(spacing: 8) {
-                    // Related Research button
+                    
+                    // Related Research button:
+                    // This button launches the RelatedResearchView which uses:
+                    // 1. PerplexityRelatedResearchService with Sonar Pro API for semantic search
+                    // 2. PubMedAPI (E-Utilities) for metadata validation and enrichment 
+                    // 3. Hybrid architecture combines both services for best results:
+                    //    - First uses Perplexity to find semantically relevant papers
+                    //    - Then enriches results with PubMed for validated metadata
+                    //    - Shows authoritative links, PMIDs, DOIs, and proper citations
                     ContextButton(
                         title: "Related Research",
                         iconName: "doc.text.magnifyingglass",
@@ -243,9 +238,6 @@ struct ButtonRowView: View {
                             showRelatedResearchView = true
                         }
                     )
-                    
-                    // Placeholder for symmetry - empty space
-                    Spacer()
                 }
             }
             .frame(maxWidth: .infinity) // Ensure HStack takes full width

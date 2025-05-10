@@ -106,7 +106,7 @@ struct OpenAIChatView: View {
             .background(Color.white)
             .shadow(color: Color.black.opacity(0.1), radius: 5, y: -2)
         }
-        .navigationTitle("Ask About Poster (OpenAI)")
+        .navigationTitle("Ask About Poster")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Error", isPresented: $showingError) {
             Button("OK", role: .cancel) {}
@@ -262,8 +262,8 @@ struct OpenAIChatView: View {
                 case .success(let responseText):
                     print("📝 Received OpenAI API response: \(responseText.prefix(30))...")
                     
-                    // Add the AI response with a prefix to indicate it's from OpenAI
-                    let aiMessage = ChatMessage(content: "💬 [OpenAI] " + responseText, sender: .ai)
+                    // Add the AI response 
+                    let aiMessage = ChatMessage(content: responseText, sender: .ai)
                     
                     // Add message to conversation
                     if let conversation = self.conversation {
