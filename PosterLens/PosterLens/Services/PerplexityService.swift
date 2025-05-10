@@ -42,6 +42,8 @@ class PerplexityService {
         if let providedKey = apiKey, !providedKey.isEmpty {
             self.apiKey = providedKey
         }
+        
+        print("🔑 PerplexityService initialized with API key: \(self.apiKey.prefix(8))...")
     }
     
     // Check if API key is valid

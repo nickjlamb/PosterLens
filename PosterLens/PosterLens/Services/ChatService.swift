@@ -10,14 +10,21 @@ class ChatService {
     
     // Generate a response for a user's question about a poster
     func generateResponse(for posterScan: PosterScan, to question: String, previousMessages: [ChatMessage] = [], completion: @escaping (Result<String, Error>) -> Void) {
+        print("🌟🌟🌟 ChatService.generateResponse CALLED - REAL API INTEGRATION 🌟🌟🌟")
+        print("🌟 Poster ID: \(posterScan.id)")
+        print("🌟 Question: \(question)")
+        print("🌟 Previous messages count: \(previousMessages.count)")
+        
         // First, check if we have a cached context for this poster
         let posterContextPrompt: String
         if let cachedContext = contextCache[posterScan.id] {
             // Use the cached context
             posterContextPrompt = cachedContext
+            print("✅ Using cached context for poster")
         } else {
             // Create a new context from the poster data
             posterContextPrompt = createPosterContext(posterScan: posterScan)
+            print("🔄 Created new context for poster")
             
             // Cache it for future use
             contextCache[posterScan.id] = posterContextPrompt
