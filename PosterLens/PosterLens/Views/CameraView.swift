@@ -172,6 +172,11 @@ struct CameraView: View {
                 AboutView()
                     .environmentObject(onboardingManager)
             }
+            .navigationDestination(isPresented: $showingResults) {
+                if let currentScan = viewModel.currentScan {
+                    SummaryView(scan: currentScan)
+                }
+            }
         }
     }
     
@@ -397,11 +402,6 @@ struct CameraView: View {
                         .frame(height: 40)
                 }
                 .ignoresSafeArea()
-            }
-        }
-        .navigationDestination(isPresented: $showingResults) {
-            if let currentScan = viewModel.currentScan {
-                SummaryView(scan: currentScan)
             }
         }
     }
