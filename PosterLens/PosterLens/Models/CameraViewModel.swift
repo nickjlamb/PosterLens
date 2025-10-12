@@ -8,7 +8,7 @@ class CameraViewModel: ObservableObject {
     @Published var currentScan: PosterScan?
     
     private let ocrService = OCRService()
-    private let perplexityService = PerplexityService()
+    private let openAIService = OpenAIService()
     // Changed from private to public so it can be set directly
     var dataStore: DataStore?
     
@@ -28,8 +28,8 @@ class CameraViewModel: ObservableObject {
             case .success(let extractedText):
                 // Process the extracted text to clean up common OCR issues in scientific text
                 let processedText = self.ocrService.processScientificPosterText(extractedText)
-                
-                // Step 2: Generate summary using Perplexity API
+
+                // Step 2: Generate summary using OpenAI API
                 self.generateSummary(from: processedText, image: image, hasPermission: hasPermission)
                 
             case .failure(let error):
@@ -43,7 +43,7 @@ class CameraViewModel: ObservableObject {
     }
     
     private func generateSummary(from text: String, image: UIImage, hasPermission: Bool) {
-        perplexityService.generateSummary(from: text) { [weak self] result in
+        openAIService.generateStructuredSummary(from: text) { [weak self] result in
             guard let self = self else { return }
             
             DispatchQueue.main.async {

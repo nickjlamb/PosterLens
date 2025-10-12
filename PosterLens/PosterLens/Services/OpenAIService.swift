@@ -162,6 +162,49 @@ class OpenAIService {
         
         task.resume()
     }
+
+    // Generate a structured summary from OCR text
+    func generateStructuredSummary(from text: String, completion: @escaping (Result<[String], Error>) -> Void) {
+        // Validate API key
+        if !hasValidAPIKey {
+            completion(.failure(OpenAIError.missingAPIKey))
+            return
+        }
+
+        let summaryPrompt = """
+        You are a scientific summarization assistant. Analyze the following text extracted from a scientific poster and create a structured summary.
+
+        Please provide EXACTLY 4 bullet points covering:
+        1. Main Research Question/Objective
+        2. Methodology Used
+        3. Key Results and Findings
+        4. Main Conclusions and Implications
+
+        Format each point starting with "**[Category]**: " followed by the content.
+
+        Text to summarize:
+        \(text)
+        """
+
+        generateChatResponse(prompt: summaryPrompt) { result in
+            switch result {
+            case .success(let response):
+                // Split the response into bullet points
+                let points = response.components(separatedBy: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty && ($0.starts(with: "**") || $0.starts(with: "1.") || $0.starts(with: "2.") || $0.starts(with: "3.") || $0.starts(with: "4.")) }
+
+                if points.isEmpty {
+                    completion(.failure(OpenAIError.invalidResponse))
+                } else {
+                    completion(.success(points))
+                }
+
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
 }
 
 class OpenAIChatService {
