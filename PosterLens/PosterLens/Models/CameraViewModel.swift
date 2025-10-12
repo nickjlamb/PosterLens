@@ -43,17 +43,26 @@ class CameraViewModel: ObservableObject {
     }
     
     private func generateSummary(from text: String, image: UIImage, hasPermission: Bool) {
+        print("🎯 CameraViewModel.generateSummary called with text length: \(text.count)")
         openAIService.generateStructuredSummary(from: text) { [weak self] result in
-            guard let self = self else { return }
-            
+            guard let self = self else {
+                print("❌ Self is nil in generateSummary callback")
+                return
+            }
+
+            print("🎯 CameraViewModel received callback from OpenAI")
+
             DispatchQueue.main.async {
                 self.isLoading = false
-                
+
                 switch result {
                 case .success(let summary):
+                    print("✅ CameraViewModel received successful summary with \(summary.count) points")
+
                     // Extract a title from the OCR text
                     let title = self.ocrService.extractPosterTitle(from: text)
-                    
+                    print("📝 Extracted title: \(title)")
+
                     // Create a new scan with the results
                     let newScan = PosterScan(
                         title: title,
@@ -64,14 +73,17 @@ class CameraViewModel: ObservableObject {
                         hasPermission: hasPermission
                     )
                     self.currentScan = newScan
-                    
+                    print("✅ Created new scan and set currentScan")
+
                     // Always save the scan to history
                     self.dataStore?.saveScan(newScan)
-                    
+                    print("✅ Saved scan to dataStore")
+
                 case .failure(let error):
+                    print("❌ CameraViewModel received error: \(error.localizedDescription)")
                     self.showingError = true
                     self.errorMessage = "Summary generation failed: \(error.localizedDescription)"
-                    
+
                     // Create a basic scan with just the OCR text so we don't lose the data
                     // This allows users to at least see what was captured even if summary generation failed
                     let title = self.ocrService.extractPosterTitle(from: text)
@@ -84,7 +96,8 @@ class CameraViewModel: ObservableObject {
                         hasPermission: hasPermission
                     )
                     self.currentScan = fallbackScan
-                    
+                    print("⚠️ Created fallback scan due to error")
+
                     // Always save the fallback scan to history too
                     self.dataStore?.saveScan(fallbackScan)
                 }

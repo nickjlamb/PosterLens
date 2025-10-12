@@ -131,35 +131,45 @@ class OpenAIService {
             // Process the response
             do {
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    print("📋 Parsed JSON response successfully")
+
                     // Check for API errors first
                     if let errorInfo = json["error"] as? [String: Any],
                        let message = errorInfo["message"] as? String {
+                        print("❌ API returned error: \(message)")
                         completion(.failure(OpenAIError.apiError(message)))
                         return
                     }
-                    
+
                     // Process successful response
                     if let choices = json["choices"] as? [[String: Any]],
                        let firstChoice = choices.first,
                        let message = firstChoice["message"] as? [String: Any],
                        let content = message["content"] as? String {
-                        
+
+                        print("✅ Successfully extracted content from response (\(content.count) characters)")
+
                         // Ensure the content is cleaned up and ready for display
                         let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-                        
+
                         if cleanContent.isEmpty {
+                            print("❌ Content is empty after cleaning")
                             completion(.failure(OpenAIError.apiError("The API returned an empty response")))
                         } else {
+                            print("✅ Calling completion with success")
                             completion(.success(cleanContent))
                         }
                     } else {
+                        print("❌ Failed to extract content from JSON structure")
                         completion(.failure(OpenAIError.invalidResponse))
                     }
                 } else {
+                    print("❌ Failed to parse JSON response")
                     completion(.failure(OpenAIError.invalidResponse))
                 }
             } catch {
                 let errorMessage = "JSON parsing error: \(error.localizedDescription)"
+                print("❌ \(errorMessage)")
                 completion(.failure(OpenAIError.requestFailed(errorMessage)))
             }
         }

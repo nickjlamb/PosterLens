@@ -69,21 +69,21 @@ struct CameraView: View {
                 ZStack {
                     DesignSystem.Colors.brandGradient
                         .ignoresSafeArea()
-                        
+
                     // Very subtle background circles (less prominent than in AboutView)
                     Circle()
                         .fill(Color.white.opacity(0.05))
                         .frame(width: 200, height: 200)
                         .blur(radius: 30)
                         .offset(x: -150, y: 50)
-                    
+
                     Circle()
                         .fill(Color.white.opacity(0.05))
                         .frame(width: 300, height: 300)
                         .blur(radius: 40)
                         .offset(x: 150, y: 400)
                 }
-                
+
                 if viewModel.isLoading {
                     loadingView
                 } else {
@@ -153,13 +153,13 @@ struct CameraView: View {
             .onAppear {
                 // Set dataStore when view appears
                 viewModel.dataStore = dataStore
-                
+
                 // Start entrance animation
                 withAnimation(.easeOut(duration: 0.8)) {
                     offsetY = 0
                     opacity = 1
                 }
-                
+
                 // Force refresh of recent scans
                 refreshID = UUID()
             }
@@ -356,7 +356,7 @@ struct CameraView: View {
                         // Pass permission status to the view model
                         viewModel.processImage(image, hasPermission: hasPermission)
                         showingScanner = false
-                        
+
                         // Always try to navigate to results
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             // Add a slight delay to ensure processing completes
@@ -364,15 +364,15 @@ struct CameraView: View {
                                 showingResults = true
                                 // Show history hint after completing a scan
                                 onboardingManager.showHistoryHintIfNeeded()
-                                
+
                                 // Force refresh of recent scans
                                 refreshID = UUID()
-                                
+
                                 // Provide success haptic feedback
                                 HapticManager.shared.success()
                             }
                         }
-                        
+
                         // Reset permission for next scan
                         hasPermission = false
                     },

@@ -147,7 +147,7 @@ struct ButtonRowView: View {
     @State private var directions: [String]?
     @State private var showingError: Bool = false
     @State private var errorMessage: String = ""
-    
+
     // Service for API calls
     private let perplexityService = PerplexityService()
     

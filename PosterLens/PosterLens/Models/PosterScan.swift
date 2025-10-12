@@ -1,7 +1,12 @@
 import Foundation
 import UIKit
 
-struct PosterScan: Identifiable, Codable {
+struct PosterScan: Identifiable, Codable, Equatable {
+    // Equatable conformance - compare by ID since that's unique
+    static func == (lhs: PosterScan, rhs: PosterScan) -> Bool {
+        return lhs.id == rhs.id
+    }
+
     let id: UUID
     let title: String
     let rawText: String
