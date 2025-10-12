@@ -27,21 +27,25 @@ enum OpenAIError: Error, LocalizedError {
 }
 
 class OpenAIService {
-    // Developer-provided API key - replace with your actual OpenAI key
-    private let defaultAPIKey = "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"  // Replace with your actual OpenAI API key
     var apiKey: String
     private let baseURL = "https://api.openai.com/v1/chat/completions"
-    
-    // Initialize with the developer-provided API key
+
+    // Initialize - loads API key from Secrets.plist
     init(apiKey: String? = nil) {
-        // Use the default API key that the developer provides
-        self.apiKey = defaultAPIKey
-        
-        // Optional override for testing or if key needs to be changed
-        if let providedKey = apiKey, !providedKey.isEmpty {
+        // Try to load from Secrets.plist
+        if let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path) as? [String: Any],
+           let secretKey = dict["OpenAI_API_Key"] as? String {
+            self.apiKey = secretKey
+        } else if let providedKey = apiKey, !providedKey.isEmpty {
+            // Fall back to provided key
             self.apiKey = providedKey
+        } else {
+            // No key available
+            self.apiKey = ""
+            print("⚠️ Warning: No OpenAI API key found in Secrets.plist or provided")
         }
-        
+
         print("🔑 OpenAIService initialized with API key: \(self.apiKey.prefix(8))...")
     }
     
