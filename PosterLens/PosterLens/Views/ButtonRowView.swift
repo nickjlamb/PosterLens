@@ -141,7 +141,6 @@ struct ButtonRowView: View {
     @State private var showDirectionsView: Bool = false
     @State private var showChatView: Bool = false
     @State private var showOpenAIChatView: Bool = false  // New state for OpenAI chat view
-    @State private var showRelatedResearchView: Bool = false  // New state for related research view
     @State private var isGeneratingQuestions: Bool = false
     @State private var isGeneratingDirections: Bool = false
     @State private var questions: [String]?
@@ -212,30 +211,14 @@ struct ButtonRowView: View {
                     )
                 }
                 
-                // Second row of buttons
+                // Second row - single button
                 HStack(spacing: 8) {
-                    // Third button: Chat with AI (now OpenAI)
+                    // Chat with AI (OpenAI)
                     ContextButton(
                         title: "Chat with AI",
                         iconName: "bubble.left.and.bubble.right.fill",
                         action: {
                             showOpenAIChatView = true
-                        }
-                    )
-                    
-                    // Related Research button:
-                    // This button launches the RelatedResearchView which uses:
-                    // 1. PerplexityRelatedResearchService with Sonar Pro API for semantic search
-                    // 2. PubMedAPI (E-Utilities) for metadata validation and enrichment 
-                    // 3. Hybrid architecture combines both services for best results:
-                    //    - First uses Perplexity to find semantically relevant papers
-                    //    - Then enriches results with PubMed for validated metadata
-                    //    - Shows authoritative links, PMIDs, DOIs, and proper citations
-                    ContextButton(
-                        title: "Related Research",
-                        iconName: "doc.text.magnifyingglass",
-                        action: {
-                            showRelatedResearchView = true
                         }
                     )
                 }
@@ -287,10 +270,6 @@ struct ButtonRowView: View {
         }
         .navigationDestination(isPresented: $showOpenAIChatView) {
             OpenAIChatView(posterScan: scan)
-                .environmentObject(dataStore)
-        }
-        .navigationDestination(isPresented: $showRelatedResearchView) {
-            RelatedResearchView(posterScan: scan)
                 .environmentObject(dataStore)
         }
         .alert(isPresented: $showingError) {
