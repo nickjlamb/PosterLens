@@ -28,21 +28,25 @@ enum PerplexityError: Error, LocalizedError {
 }
 
 class PerplexityService {
-    // Hardcoded API key provided by the user
-    private let defaultAPIKey = "***REMOVED***"
     var apiKey: String
     private let baseURL = "https://api.perplexity.ai/chat/completions"
-    
-    // Initialize with API key from environment or configuration
+
+    // Initialize - loads API key from Secrets.plist
     init(apiKey: String? = nil) {
-        // Always use the default API key first
-        self.apiKey = defaultAPIKey
-        
-        // If a specific key is provided, use that instead
-        if let providedKey = apiKey, !providedKey.isEmpty {
+        // Try to load from Secrets.plist
+        if let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path) as? [String: Any],
+           let secretKey = dict["Perplexity_API_Key"] as? String {
+            self.apiKey = secretKey
+        } else if let providedKey = apiKey, !providedKey.isEmpty {
+            // Fall back to provided key
             self.apiKey = providedKey
+        } else {
+            // No key available
+            self.apiKey = ""
+            print("⚠️ Warning: No Perplexity API key found in Secrets.plist or provided")
         }
-        
+
         print("🔑 PerplexityService initialized with API key: \(self.apiKey.prefix(8))...")
     }
     
