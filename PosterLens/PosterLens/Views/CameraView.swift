@@ -94,6 +94,11 @@ struct CameraView: View {
                 // Directly launch the camera when notification is received
                 showingScanner = true
             }
+            .navigationDestination(isPresented: $showingResults) {
+                if let currentScan = viewModel.currentScan {
+                    SummaryView(scan: currentScan)
+                }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -171,11 +176,6 @@ struct CameraView: View {
             .sheet(isPresented: $showingAboutView) {
                 AboutView()
                     .environmentObject(onboardingManager)
-            }
-            .navigationDestination(isPresented: $showingResults) {
-                if let currentScan = viewModel.currentScan {
-                    SummaryView(scan: currentScan)
-                }
             }
         }
     }
