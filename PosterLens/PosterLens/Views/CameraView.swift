@@ -90,9 +90,8 @@ struct CameraView: View {
                 } else {
                     mainCameraView
                 }
-            }
-            .overlay(
-                // Info button overlay in top-right corner
+
+                // Info button positioned with ZStack alignment to ensure it floats above everything
                 VStack {
                     HStack {
                         Spacer()
@@ -103,13 +102,20 @@ struct CameraView: View {
                                 .foregroundColor(.white)
                                 .font(.system(size: 24))
                                 .padding(16)
+                                .background(
+                                    Circle()
+                                        .fill(Color.black.opacity(0.2))
+                                        .blur(radius: 8)
+                                )
                         }
                         .buttonPressAnimation()
+                        .padding(.top, 50)
+                        .padding(.trailing, 20)
                     }
                     Spacer()
                 }
-                , alignment: .top
-            )
+                .zIndex(1000)
+            }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCamera"))) { _ in
                 // Directly launch the camera when notification is received
                 showingScanner = true
