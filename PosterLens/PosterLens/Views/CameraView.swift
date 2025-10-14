@@ -65,7 +65,7 @@ struct CameraView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .topTrailing) {
                 // Exact same blue gradient as in AboutView
                 ZStack {
                     DesignSystem.Colors.brandGradient
@@ -91,30 +91,20 @@ struct CameraView: View {
                     mainCameraView
                 }
 
-                // Info button positioned with ZStack alignment to ensure it floats above everything
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button(action: {
-                            showingAboutView = true
-                        }) {
-                            Image(systemName: "info.circle")
-                                .foregroundColor(.white)
-                                .font(.system(size: 24))
-                                .padding(16)
-                                .background(
-                                    Circle()
-                                        .fill(Color.black.opacity(0.2))
-                                        .blur(radius: 8)
-                                )
-                        }
-                        .buttonPressAnimation()
-                        .padding(.top, 50)
-                        .padding(.trailing, 20)
-                    }
-                    Spacer()
+                // Top-right info button - direct child of ZStack
+                Button(action: {
+                    showingAboutView = true
+                }) {
+                    Image(systemName: "info.circle")
+                        .resizable()
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(.white)
+                        .padding()
                 }
-                .zIndex(1000)
+                .buttonPressAnimation()
+                .padding(.top, 50)
+                .padding(.trailing, 20)
+                .zIndex(1)
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCamera"))) { _ in
                 // Directly launch the camera when notification is received
