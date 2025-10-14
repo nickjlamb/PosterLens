@@ -66,30 +66,34 @@ struct CameraView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .topTrailing) {
-                // Exact same blue gradient as in AboutView
-                ZStack {
-                    DesignSystem.Colors.brandGradient
-                        .ignoresSafeArea()
+                // Content container with proper framing
+                VStack {
+                    // Exact same blue gradient as in AboutView
+                    ZStack {
+                        DesignSystem.Colors.brandGradient
+                            .ignoresSafeArea()
 
-                    // Very subtle background circles (less prominent than in AboutView)
-                    Circle()
-                        .fill(Color.white.opacity(0.05))
-                        .frame(width: 200, height: 200)
-                        .blur(radius: 30)
-                        .offset(x: -150, y: 50)
+                        // Very subtle background circles (less prominent than in AboutView)
+                        Circle()
+                            .fill(Color.white.opacity(0.05))
+                            .frame(width: 200, height: 200)
+                            .blur(radius: 30)
+                            .offset(x: -150, y: 50)
 
-                    Circle()
-                        .fill(Color.white.opacity(0.05))
-                        .frame(width: 300, height: 300)
-                        .blur(radius: 40)
-                        .offset(x: 150, y: 400)
+                        Circle()
+                            .fill(Color.white.opacity(0.05))
+                            .frame(width: 300, height: 300)
+                            .blur(radius: 40)
+                            .offset(x: 150, y: 400)
+                    }
+
+                    if viewModel.isLoading {
+                        loadingView
+                    } else {
+                        mainCameraView
+                    }
                 }
-
-                if viewModel.isLoading {
-                    loadingView
-                } else {
-                    mainCameraView
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
                 // Top-right info button - direct child of ZStack
                 Button(action: {
@@ -106,6 +110,7 @@ struct CameraView: View {
                 .padding(.trailing, 20)
                 .zIndex(1)
             }
+            .ignoresSafeArea()
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCamera"))) { _ in
                 // Directly launch the camera when notification is received
                 showingScanner = true
