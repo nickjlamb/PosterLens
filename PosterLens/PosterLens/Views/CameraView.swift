@@ -53,12 +53,13 @@ struct CameraView: View {
     @State private var offsetY: CGFloat = 50
     @State private var opacity: Double = 0
     @State private var showingAboutView = false
-    
+    @State private var showingScanningGuidelines = false
+
     // Animation properties
     @State private var pulseScale: CGFloat = 1.0
     @State private var rotationAngle: Double = 0
     @State private var showMotionGraphics = false
-    
+
     // State to force refresh of recent scans
     @State private var refreshID = UUID()
     
@@ -89,6 +90,23 @@ struct CameraView: View {
                 } else {
                     mainCameraView
                 }
+
+                // Info button overlay in top-right corner
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            showingAboutView = true
+                        }) {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(.white)
+                                .font(.system(size: 24))
+                                .padding(16)
+                        }
+                        .buttonPressAnimation()
+                    }
+                    Spacer()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCamera"))) { _ in
                 // Directly launch the camera when notification is received
@@ -114,19 +132,7 @@ struct CameraView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingAboutView = true
-                    }) {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.white)
-                            .font(.system(size: 20))
-                            .padding(8)
-                    }
-                    .buttonPressAnimation()
-                }
-            }
+            .navigationBarHidden(true)
             .safeAreaInset(edge: .top) {
                 Group {
                     if UIDevice.current.orientation.isLandscape {
@@ -190,6 +196,9 @@ struct CameraView: View {
             .sheet(isPresented: $showingAboutView) {
                 AboutView()
                     .environmentObject(onboardingManager)
+            }
+            .sheet(isPresented: $showingScanningGuidelines) {
+                ScanningGuidelinesView()
             }
         }
     }
@@ -330,14 +339,36 @@ struct CameraView: View {
                     // Portrait layout - vertical arrangement
                     VStack {
                         Spacer()
-                        
+
                         // Camera button section with cards
                         cameraScanCard
                             .offset(y: offsetY)
                             .opacity(opacity)
-                        
+
+                        // Scanning Guidelines button
+                        Button(action: {
+                            showingScanningGuidelines = true
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle")
+                                    .font(.system(size: 16))
+                                Text("Scanning Guidelines")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 20)
+                            .background(Color.white.opacity(0.2))
+                            .cornerRadius(25)
+                        }
+                        .buttonPressAnimation()
+                        .padding(.top, 16)
+                        .offset(y: offsetY)
+                        .opacity(opacity)
+
                         Spacer()
-                        
+
                         // Recent scans preview (teaser for history)
                         if !dataStore.savedScans.isEmpty {
                             recentScansPreview
