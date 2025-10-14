@@ -91,7 +91,7 @@ struct CameraView: View {
                     mainCameraView
                 }
 
-                // Info button overlay in top-right corner
+                // Info button overlay in top-right corner (positioned at safe area top)
                 VStack {
                     HStack {
                         Spacer()
@@ -105,6 +105,7 @@ struct CameraView: View {
                         }
                         .buttonPressAnimation()
                     }
+                    .padding(.top, 8) // Position below the header
                     Spacer()
                 }
             }
