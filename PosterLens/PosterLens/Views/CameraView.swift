@@ -90,8 +90,9 @@ struct CameraView: View {
                 } else {
                     mainCameraView
                 }
-
-                // Info button overlay in top-right corner (positioned at safe area top)
+            }
+            .overlay(
+                // Info button overlay in top-right corner
                 VStack {
                     HStack {
                         Spacer()
@@ -105,10 +106,10 @@ struct CameraView: View {
                         }
                         .buttonPressAnimation()
                     }
-                    .padding(.top, 8) // Position below the header
                     Spacer()
                 }
-            }
+                , alignment: .top
+            )
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCamera"))) { _ in
                 // Directly launch the camera when notification is received
                 showingScanner = true
