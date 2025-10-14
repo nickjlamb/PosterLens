@@ -99,6 +99,20 @@ struct CameraView: View {
                     SummaryView(scan: currentScan)
                 }
             }
+            .onChange(of: viewModel.currentScan) { newScan in
+                // Immediately navigate when a new scan is available
+                if newScan != nil {
+                    showingResults = true
+                    // Show history hint after completing a scan
+                    onboardingManager.showHistoryHintIfNeeded()
+
+                    // Force refresh of recent scans
+                    refreshID = UUID()
+
+                    // Provide success haptic feedback
+                    HapticManager.shared.success()
+                }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -362,22 +376,7 @@ struct CameraView: View {
                         viewModel.processImage(image, hasPermission: hasPermission)
                         showingScanner = false
 
-                        // Always try to navigate to results
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            // Add a slight delay to ensure processing completes
-                            if viewModel.currentScan != nil {
-                                showingResults = true
-                                // Show history hint after completing a scan
-                                onboardingManager.showHistoryHintIfNeeded()
-
-                                // Force refresh of recent scans
-                                refreshID = UUID()
-
-                                // Provide success haptic feedback
-                                HapticManager.shared.success()
-                            }
-                        }
-
+                        // Navigation is now handled by onChange(of: viewModel.currentScan)
                         // Reset permission for next scan
                         hasPermission = false
                     },
