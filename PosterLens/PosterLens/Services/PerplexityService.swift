@@ -27,35 +27,25 @@ enum PerplexityError: Error, LocalizedError {
     }
 }
 
-// MEMORY: Converted to singleton to prevent multiple instances and consistent API key handling
+/// MEMORY: Singleton pattern prevents multiple instances and ensures consistent API key handling
 class PerplexityService {
     static let shared = PerplexityService()
 
     var apiKey: String
     private let baseURL = "https://api.perplexity.ai/chat/completions"
 
-    // Initialize - loads API key from Secrets.plist
+    /// Initialize Perplexity service (private for singleton pattern)
+    /// - Parameter apiKey: Optional API key (loads from Secrets.plist if not provided)
     private init(apiKey: String? = nil) {
-        // Try to load from Secrets.plist
-        if let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
-           let dict = NSDictionary(contentsOfFile: path) as? [String: Any],
-           let secretKey = dict["Perplexity_API_Key"] as? String {
-            self.apiKey = secretKey
-        } else if let providedKey = apiKey, !providedKey.isEmpty {
-            // Fall back to provided key
-            self.apiKey = providedKey
-        } else {
-            // No key available
-            self.apiKey = ""
-            print("⚠️ Warning: No Perplexity API key found in Secrets.plist or provided")
-        }
+        // Use SecretManager to load API key
+        self.apiKey = SecretManager.shared.loadAPIKey(for: "Perplexity_API_Key", fallback: apiKey)
 
         print("🔑 PerplexityService initialized with API key: \(self.apiKey.prefix(8))...")
     }
-    
-    // Check if API key is valid
+
+    /// Check if the current API key is valid for Perplexity
     var hasValidAPIKey: Bool {
-        return !apiKey.isEmpty && apiKey != "YOUR_API_KEY_HERE"
+        return SecretManager.shared.isValid(apiKey: apiKey)
     }
     
     // Set API key (for internal use only, not exposed to users)

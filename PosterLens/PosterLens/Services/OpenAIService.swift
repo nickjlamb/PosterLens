@@ -30,36 +30,31 @@ class OpenAIService {
     var apiKey: String
     private let baseURL = "https://api.openai.com/v1/chat/completions"
 
-    // Initialize - loads API key from Secrets.plist
+    /// Initialize OpenAI service with optional API key
+    /// - Parameter apiKey: Optional API key (loads from Secrets.plist if not provided)
     init(apiKey: String? = nil) {
-        // Try to load from Secrets.plist
-        if let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
-           let dict = NSDictionary(contentsOfFile: path) as? [String: Any],
-           let secretKey = dict["OpenAI_API_Key"] as? String {
-            self.apiKey = secretKey
-        } else if let providedKey = apiKey, !providedKey.isEmpty {
-            // Fall back to provided key
-            self.apiKey = providedKey
-        } else {
-            // No key available
-            self.apiKey = ""
-            print("⚠️ Warning: No OpenAI API key found in Secrets.plist or provided")
-        }
+        // Use SecretManager to load API key
+        self.apiKey = SecretManager.shared.loadAPIKey(for: "OpenAI_API_Key", fallback: apiKey)
 
         print("🔑 OpenAIService initialized with API key: \(self.apiKey.prefix(8))...")
     }
-    
-    // Check if API key is valid
+
+    /// Check if the current API key is valid for OpenAI
     var hasValidAPIKey: Bool {
-        return !apiKey.isEmpty && apiKey.hasPrefix("sk-")
+        return SecretManager.shared.isValid(apiKey: apiKey, requiredPrefix: "sk-")
     }
     
-    // Set API key (for testing or if key needs to be rotated)
+    /// Update the API key (useful for testing or key rotation)
+    /// - Parameter key: The new API key to use
     func setAPIKey(_ key: String) {
         apiKey = key
     }
     
-    // Generate a chat response based on a prompt
+    /// Generate a chat response using OpenAI's GPT model
+    /// - Parameters:
+    ///   - prompt: The input prompt for the AI
+    ///   - completion: Completion handler with Result containing the response string or error
+    /// - Note: Uses automatic retry logic with exponential backoff for resilience
     func generateChatResponse(prompt: String, completion: @escaping (Result<String, Error>) -> Void) {
         // Validate API key
         if !hasValidAPIKey {
@@ -152,7 +147,11 @@ class OpenAIService {
         }
     }
 
-    // Generate a structured summary from OCR text
+    /// Generate a structured summary from OCR-extracted text
+    /// - Parameters:
+    ///   - text: The raw text extracted from a scientific poster
+    ///   - completion: Completion handler with Result containing structured bullet points or error
+    /// - Note: Returns 4 bullet points covering research question, methodology, results, and conclusions
     func generateStructuredSummary(from text: String, completion: @escaping (Result<[String], Error>) -> Void) {
         // Validate API key
         if !hasValidAPIKey {
@@ -198,15 +197,23 @@ class OpenAIService {
     }
 }
 
+/// Service for poster-specific chat interactions using OpenAI
 class OpenAIChatService {
     private let openAIService: OpenAIService
     private var contextCache: [UUID: String] = [:] // Cache poster context by ID
-    
+
+    /// Initialize chat service with optional OpenAI service instance
+    /// - Parameter openAIService: Optional OpenAI service (creates new instance if not provided)
     init(openAIService: OpenAIService? = nil) {
         self.openAIService = openAIService ?? OpenAIService()
     }
-    
-    // Generate a response for a user's question about a poster
+
+    /// Generate a response for a user's question about a specific poster
+    /// - Parameters:
+    ///   - posterScan: The poster scan to answer questions about
+    ///   - question: The user's question
+    ///   - previousMessages: Previous conversation messages for context
+    ///   - completion: Completion handler with Result containing the AI response or error
     func generateResponse(for posterScan: PosterScan, to question: String, previousMessages: [ChatMessage] = [], completion: @escaping (Result<String, Error>) -> Void) {
         print("🌟🌟🌟 OpenAIChatService.generateResponse CALLED - REAL API INTEGRATION 🌟🌟🌟")
         print("🌟 Poster ID: \(posterScan.id)")
