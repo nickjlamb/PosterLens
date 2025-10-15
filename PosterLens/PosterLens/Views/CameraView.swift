@@ -65,7 +65,7 @@ struct CameraView: View {
     
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .topTrailing) {
+            ZStack {
                 // Blue gradient background fills entire screen
                 DesignSystem.Colors.brandGradient
                     .ignoresSafeArea()
@@ -92,27 +92,6 @@ struct CameraView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
-
-                // Top-right info button - direct child of ZStack with enhanced visibility
-                Button(action: {
-                    showingAboutView = true
-                }) {
-                    Image(systemName: "info.circle")
-                        .resizable()
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(
-                            Circle()
-                                .fill(Color.white.opacity(0.3))
-                                .blur(radius: 2)
-                        )
-                        .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
-                }
-                .buttonPressAnimation()
-                .padding(.top, 50)
-                .padding(.trailing, 20)
-                .zIndex(999)
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCamera"))) { _ in
                 // Directly launch the camera when notification is received
@@ -140,41 +119,60 @@ struct CameraView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarHidden(true)
             .safeAreaInset(edge: .top) {
-                Group {
-                    if UIDevice.current.orientation.isLandscape {
-                        // Landscape header - use HStack and position to the left
-                        HStack(spacing: 8) {
-                            Spacer().frame(width: 16)
-                            
-                            Text("PosterLens")
-                                .font(.title3.bold())
-                                .foregroundColor(.white)
-                            
-                            Text("Your AI Scientific Conference Companion")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white.opacity(0.9))
-                                .padding(.leading, 4)
-                            
-                            Spacer()
-                        }
-                        .frame(height: 44)
-                    } else {
-                        // Portrait header - use traditional VStack centered
-                        VStack(spacing: 4) {
-                            Text("PosterLens")
-                                .font(.title.bold())
-                                .foregroundColor(.white)
-                            
-                            Text("Your AI Scientific Conference Companion")
-                                .font(.headline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white.opacity(0.9))
+                ZStack {
+                    // Main header content
+                    Group {
+                        if UIDevice.current.orientation.isLandscape {
+                            // Landscape header - use HStack and position to the left
+                            HStack(spacing: 8) {
+                                Spacer().frame(width: 16)
+
+                                Text("PosterLens")
+                                    .font(.title3.bold())
+                                    .foregroundColor(.white)
+
+                                Text("Your AI Scientific Conference Companion")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .padding(.leading, 4)
+
+                                Spacer()
+                            }
+                            .frame(height: 44)
+                        } else {
+                            // Portrait header - use traditional VStack centered
+                            VStack(spacing: 4) {
+                                Text("PosterLens")
+                                    .font(.title.bold())
+                                    .foregroundColor(.white)
+
+                                Text("Your AI Scientific Conference Companion")
+                                    .font(.headline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white.opacity(0.9))
+                            }
                         }
                     }
+                    .padding(.top, 10)
+                    .padding(.bottom, 5)
+
+                    // Info button in top-right corner
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                showingAboutView = true
+                            }) {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 24))
+                                    .padding()
+                            }
+                        }
+                        Spacer()
+                    }
                 }
-                .padding(.top, 10)
-                .padding(.bottom, 5)
             }
             .alert("Error", isPresented: $viewModel.showingError) {
                 Button("OK", role: .cancel) {}
