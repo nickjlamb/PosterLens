@@ -103,11 +103,12 @@ class DataStore: ObservableObject {
     // PERFORMANCE: Load scans from file on background queue
     private func loadSavedScans() {
         let fileURL = getScansFileURL()
-        let fileManager = FileManager.default
 
         // PERFORMANCE OPTIMIZATION: Move file I/O to background queue
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
+
+            let fileManager = FileManager.default  // Create inside closure to satisfy Sendable
 
             // First, try to load from file
             if fileManager.fileExists(atPath: fileURL.path) {
@@ -354,11 +355,12 @@ class DataStore: ObservableObject {
     /// Load conversations from file or UserDefaults - PERFORMANCE: Runs on background queue
     private func loadConversations() {
         let fileURL = getConversationsFileURL()
-        let fileManager = FileManager.default
 
         // PERFORMANCE OPTIMIZATION: Move file I/O to background queue
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
+
+            let fileManager = FileManager.default  // Create inside closure to satisfy Sendable
 
             // First, try to load from file
             if fileManager.fileExists(atPath: fileURL.path) {

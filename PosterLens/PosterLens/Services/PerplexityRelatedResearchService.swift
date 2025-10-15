@@ -336,7 +336,7 @@ class PerplexityRelatedResearchService {
             // Extract information from the URL if possible
             var title = "Research Paper \(index + 1)"
             var journal: String?
-            var year = Calendar.current.component(.year, from: Date())
+            let year = Calendar.current.component(.year, from: Date())  // Changed to 'let' - never mutated
 
             if let url = URL(string: urlString), let host = url.host {
                 // Determine journal from domain
