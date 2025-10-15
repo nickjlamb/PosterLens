@@ -119,7 +119,7 @@ struct CameraView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarHidden(true)
             .safeAreaInset(edge: .top) {
-                ZStack {
+                ZStack(alignment: .topTrailing) {
                     // Main header content
                     Group {
                         if UIDevice.current.orientation.isLandscape {
@@ -158,19 +158,13 @@ struct CameraView: View {
                     .padding(.bottom, 5)
 
                     // Info button in top-right corner
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                showingAboutView = true
-                            }) {
-                                Image(systemName: "info.circle")
-                                    .foregroundColor(.white)
-                                    .font(.system(size: 24))
-                                    .padding()
-                            }
-                        }
-                        Spacer()
+                    Button(action: {
+                        showingAboutView = true
+                    }) {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.white)
+                            .font(.system(size: 24))
+                            .padding(16)
                     }
                 }
             }
