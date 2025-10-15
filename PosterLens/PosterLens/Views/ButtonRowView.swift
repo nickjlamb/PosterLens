@@ -141,6 +141,7 @@ struct ButtonRowView: View {
     @State private var showDirectionsView: Bool = false
     @State private var showChatView: Bool = false
     @State private var showOpenAIChatView: Bool = false  // New state for OpenAI chat view
+    @State private var showRelatedResearchView: Bool = false  // New state for Related Research view
     @State private var isGeneratingQuestions: Bool = false
     @State private var isGeneratingDirections: Bool = false
     @State private var questions: [String]?
@@ -211,7 +212,7 @@ struct ButtonRowView: View {
                     )
                 }
                 
-                // Second row - single button
+                // Second row - two buttons
                 HStack(spacing: 8) {
                     // Chat with AI (OpenAI)
                     ContextButton(
@@ -219,6 +220,15 @@ struct ButtonRowView: View {
                         iconName: "bubble.left.and.bubble.right.fill",
                         action: {
                             showOpenAIChatView = true
+                        }
+                    )
+
+                    // Related Research
+                    ContextButton(
+                        title: "Related Research",
+                        iconName: "doc.text.magnifyingglass",
+                        action: {
+                            showRelatedResearchView = true
                         }
                     )
                 }
@@ -270,6 +280,10 @@ struct ButtonRowView: View {
         }
         .navigationDestination(isPresented: $showOpenAIChatView) {
             OpenAIChatView(posterScan: scan)
+                .environmentObject(dataStore)
+        }
+        .navigationDestination(isPresented: $showRelatedResearchView) {
+            RelatedResearchView(posterScan: scan)
                 .environmentObject(dataStore)
         }
         .alert(isPresented: $showingError) {
