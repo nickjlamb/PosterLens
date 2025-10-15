@@ -16,58 +16,59 @@ struct ContentView: View {
                     }
                     .tag(0)
                 
-                NavigationView {
-                    ImprovedHistoryView(selectedTab: $selectedTab)
-                        .navigationBarItems(trailing:
-                            Button(action: {
-                                showingAboutView = true
-                            }) {
-                                Image(systemName: "info.circle")
-                                    .foregroundColor(.white)
-                            }
-                        )
-                }
-                .tabItem {
-                    Label("History", systemImage: "clock")
-                }
-                .tag(1)
+                ImprovedHistoryView(selectedTab: $selectedTab)
+                    .tabItem {
+                        Label("History", systemImage: "clock")
+                    }
+                    .tag(1)
             }
             .accentColor(.blue)  // Make tab items more visible
             .onAppear {
+                // Configure navigation bar appearance for transparent background with white controls
+                let navBarAppearance = UINavigationBarAppearance()
+                navBarAppearance.configureWithTransparentBackground()
+                navBarAppearance.backgroundColor = .clear
+                navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+                navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+
+                // Apply navigation bar appearance globally
+                UINavigationBar.appearance().standardAppearance = navBarAppearance
+                UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
+                UINavigationBar.appearance().compactAppearance = navBarAppearance
+                UINavigationBar.appearance().tintColor = .white
+
                 // Customize tab bar appearance
-                let appearance = UITabBarAppearance()
-                appearance.configureWithOpaqueBackground()
-                
+                let tabBarAppearance = UITabBarAppearance()
+                tabBarAppearance.configureWithOpaqueBackground()
+
                 // Make the tab bar more visible with a semi-transparent background
-                appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.9)
-                
+                tabBarAppearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.9)
+
                 // Add a subtle shadow for better visibility
-                appearance.shadowColor = UIColor.black.withAlphaComponent(0.3)
-                appearance.shadowImage = UIImage()
-                
+                tabBarAppearance.shadowColor = UIColor.black.withAlphaComponent(0.3)
+                tabBarAppearance.shadowImage = UIImage()
+
                 // Customize the selected and unselected item appearance
                 let selectedAttributes: [NSAttributedString.Key: Any] = [
                     .foregroundColor: UIColor.systemBlue,
                     .font: UIFont.systemFont(ofSize: 12, weight: .semibold)
                 ]
-                
+
                 let normalAttributes: [NSAttributedString.Key: Any] = [
                     .foregroundColor: UIColor.darkGray,
                     .font: UIFont.systemFont(ofSize: 12, weight: .regular)
                 ]
-                
-                appearance.stackedLayoutAppearance.selected.titleTextAttributes = selectedAttributes
-                appearance.stackedLayoutAppearance.normal.titleTextAttributes = normalAttributes
-                
+
+                tabBarAppearance.stackedLayoutAppearance.selected.titleTextAttributes = selectedAttributes
+                tabBarAppearance.stackedLayoutAppearance.normal.titleTextAttributes = normalAttributes
+
                 // Make the icons more visible
-                appearance.stackedLayoutAppearance.selected.iconColor = UIColor.systemBlue
-                appearance.stackedLayoutAppearance.normal.iconColor = UIColor.darkGray
-                
-                // Apply the appearance
-                UITabBar.appearance().standardAppearance = appearance
-                if #available(iOS 15.0, *) {
-                    UITabBar.appearance().scrollEdgeAppearance = appearance
-                }
+                tabBarAppearance.stackedLayoutAppearance.selected.iconColor = UIColor.systemBlue
+                tabBarAppearance.stackedLayoutAppearance.normal.iconColor = UIColor.darkGray
+
+                // Apply the tab bar appearance
+                UITabBar.appearance().standardAppearance = tabBarAppearance
+                UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
             }
             
             // History hint tooltip
