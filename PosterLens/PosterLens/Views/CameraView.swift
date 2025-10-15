@@ -93,7 +93,7 @@ struct CameraView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
 
-                // Top-right info button - direct child of ZStack
+                // Top-right info button - direct child of ZStack with enhanced visibility
                 Button(action: {
                     showingAboutView = true
                 }) {
@@ -102,11 +102,17 @@ struct CameraView: View {
                         .frame(width: 24, height: 24)
                         .foregroundColor(.white)
                         .padding()
+                        .background(
+                            Circle()
+                                .fill(Color.white.opacity(0.3))
+                                .blur(radius: 2)
+                        )
+                        .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonPressAnimation()
                 .padding(.top, 50)
                 .padding(.trailing, 20)
-                .zIndex(1)
+                .zIndex(999)
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCamera"))) { _ in
                 // Directly launch the camera when notification is received
