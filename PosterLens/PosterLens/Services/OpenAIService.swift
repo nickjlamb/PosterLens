@@ -63,21 +63,21 @@ class OpenAIService {
     func generateChatResponse(prompt: String, completion: @escaping (Result<String, Error>) -> Void) {
         // Validate API key
         if !hasValidAPIKey {
-            completion(.failure(OpenAIError.missingAPIKey))
+            completion(.failure(NetworkError.missingAPIKey(service: "OpenAI")))
             return
         }
-        
+
         guard let url = URL(string: baseURL) else {
-            completion(.failure(OpenAIError.invalidURL))
+            completion(.failure(NetworkError.badRequest("Invalid API URL")))
             return
         }
-        
+
         // Create the request
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        
+
         // Create the request body
         let requestBody: [String: Any] = [
             "model": "gpt-3.5-turbo", // Using GPT-3.5 Turbo for better cost efficiency
@@ -88,100 +88,75 @@ class OpenAIService {
             "max_tokens": 1024,
             "temperature": 0.3 // Lower temperature for more focused, factual responses
         ]
-        
+
         print("🚀 Using OpenAI API key: \(apiKey.prefix(8))...") // Only log prefix for security
-        
+
         // Serialize the request body
         do {
             let requestData = try JSONSerialization.data(withJSONObject: requestBody)
             request.httpBody = requestData
-            
+
             // Debug logging - print request without sensitive data
             print("📤 API Request sent to OpenAI - model: gpt-3.5-turbo, max_tokens: 1024")
         } catch {
-            let errorMessage = "Failed to serialize request: \(error.localizedDescription)"
-            print("❌ Serialization error: \(errorMessage)")
-            completion(.failure(OpenAIError.requestFailed(errorMessage)))
+            print("❌ Serialization error: \(error.localizedDescription)")
+            completion(.failure(NetworkError.malformedData))
             return
         }
-        
-        // Create and start the data task
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            // Debug HTTP response
-            if let httpResponse = response as? HTTPURLResponse {
-                print("📥 API Response status: \(httpResponse.statusCode)")
-            }
-            
-            if let error = error {
-                let errorMessage = "Network error: \(error.localizedDescription)"
-                print("❌ Network error: \(errorMessage)")
-                completion(.failure(OpenAIError.requestFailed(errorMessage)))
-                return
-            }
-            
-            guard let data = data else {
-                print("❌ No data received from API")
-                completion(.failure(OpenAIError.invalidResponse))
-                return
-            }
-            
-            // Debug that data was received (without exposing full content)
-            print("📥 API Response received (\(data.count) bytes)")
-            
-            // Process the response
+
+        // Use NetworkRequestHelper with retry logic for resilient requests
+        Task {
             do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    print("📋 Parsed JSON response successfully")
+                let (data, _) = try await NetworkRequestHelper.makeRequest(
+                    request,
+                    config: .default
+                )
 
-                    // Check for API errors first
-                    if let errorInfo = json["error"] as? [String: Any],
-                       let message = errorInfo["message"] as? String {
-                        print("❌ API returned error: \(message)")
-                        completion(.failure(OpenAIError.apiError(message)))
-                        return
-                    }
+                // Debug that data was received (without exposing full content)
+                print("📥 API Response received (\(data.count) bytes)")
 
-                    // Process successful response
-                    if let choices = json["choices"] as? [[String: Any]],
-                       let firstChoice = choices.first,
-                       let message = firstChoice["message"] as? [String: Any],
-                       let content = message["content"] as? String {
-
-                        print("✅ Successfully extracted content from response (\(content.count) characters)")
-
-                        // Ensure the content is cleaned up and ready for display
-                        let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                        if cleanContent.isEmpty {
-                            print("❌ Content is empty after cleaning")
-                            completion(.failure(OpenAIError.apiError("The API returned an empty response")))
-                        } else {
-                            print("✅ Calling completion with success")
-                            completion(.success(cleanContent))
-                        }
-                    } else {
-                        print("❌ Failed to extract content from JSON structure")
-                        completion(.failure(OpenAIError.invalidResponse))
-                    }
-                } else {
-                    print("❌ Failed to parse JSON response")
-                    completion(.failure(OpenAIError.invalidResponse))
+                // Check for API error in response
+                if let errorMessage = SafeJSONParser.extractErrorMessage(data) {
+                    print("❌ API returned error: \(errorMessage)")
+                    completion(.failure(NetworkError.apiError(service: "OpenAI", message: errorMessage)))
+                    return
                 }
+
+                // Safe JSON parsing using SafeJSONParser
+                guard let content: String = SafeJSONParser.parse(data, keyPath: "choices.0.message.content") else {
+                    print("❌ Failed to extract content from JSON structure")
+                    completion(.failure(NetworkError.malformedData))
+                    return
+                }
+
+                print("✅ Successfully extracted content from response (\(content.count) characters)")
+
+                // Ensure the content is cleaned up and ready for display
+                let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                if cleanContent.isEmpty {
+                    print("❌ Content is empty after cleaning")
+                    completion(.failure(NetworkError.emptyResponse))
+                } else {
+                    print("✅ Calling completion with success")
+                    completion(.success(cleanContent))
+                }
+
+            } catch let error as NetworkError {
+                print("❌ Network error: \(error.localizedDescription)")
+                completion(.failure(error))
             } catch {
-                let errorMessage = "JSON parsing error: \(error.localizedDescription)"
-                print("❌ \(errorMessage)")
-                completion(.failure(OpenAIError.requestFailed(errorMessage)))
+                print("❌ Unexpected error: \(error.localizedDescription)")
+                completion(.failure(NetworkError.from(error)))
             }
         }
-        
-        task.resume()
     }
 
     // Generate a structured summary from OCR text
     func generateStructuredSummary(from text: String, completion: @escaping (Result<[String], Error>) -> Void) {
         // Validate API key
         if !hasValidAPIKey {
-            completion(.failure(OpenAIError.missingAPIKey))
+            completion(.failure(NetworkError.missingAPIKey(service: "OpenAI")))
             return
         }
 
@@ -209,7 +184,9 @@ class OpenAIService {
                     .filter { !$0.isEmpty && ($0.starts(with: "**") || $0.starts(with: "1.") || $0.starts(with: "2.") || $0.starts(with: "3.") || $0.starts(with: "4.")) }
 
                 if points.isEmpty {
-                    completion(.failure(OpenAIError.invalidResponse))
+                    // ERROR RECOVERY: If parsing fails, return the whole response as a single point
+                    print("⚠️ Failed to parse bullet points, returning full response")
+                    completion(.success([response]))
                 } else {
                     completion(.success(points))
                 }
