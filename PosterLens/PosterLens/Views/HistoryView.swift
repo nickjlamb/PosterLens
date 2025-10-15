@@ -237,6 +237,7 @@ struct ImprovedHistoryView: View {
                             } label: {
                                 Image(systemName: "ellipsis.circle")
                                     .imageScale(.large)
+                                    .foregroundColor(.white)
                             }
                         }
                     }
