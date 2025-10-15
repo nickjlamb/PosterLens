@@ -9,7 +9,7 @@ class CitationEnhancer {
     private init() {}
     
     // Reference to the PerplexityService
-    private let perplexityService = PerplexityService()
+    private let perplexityService = PerplexityService.shared  // MEMORY: Use singleton
     
     // MARK: - Main Public Method
     

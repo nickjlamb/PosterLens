@@ -27,12 +27,15 @@ enum PerplexityError: Error, LocalizedError {
     }
 }
 
+// MEMORY: Converted to singleton to prevent multiple instances and consistent API key handling
 class PerplexityService {
+    static let shared = PerplexityService()
+
     var apiKey: String
     private let baseURL = "https://api.perplexity.ai/chat/completions"
 
     // Initialize - loads API key from Secrets.plist
-    init(apiKey: String? = nil) {
+    private init(apiKey: String? = nil) {
         // Try to load from Secrets.plist
         if let path = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
            let dict = NSDictionary(contentsOfFile: path) as? [String: Any],

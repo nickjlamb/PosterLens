@@ -150,7 +150,7 @@ struct ButtonRowView: View {
     @State private var errorMessage: String = ""
 
     // Service for API calls
-    private let perplexityService = PerplexityService()
+    private let perplexityService = PerplexityService.shared  // MEMORY: Use singleton
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {

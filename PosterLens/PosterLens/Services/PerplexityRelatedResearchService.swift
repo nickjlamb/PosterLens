@@ -3,7 +3,8 @@ import Foundation
 /// A service for retrieving related research papers using the Perplexity Search API (not chat) and PubMed validation
 /// This version uses the SEARCH API which actually searches the web for real papers with valid links
 class PerplexityRelatedResearchService {
-    private let perplexityService = PerplexityService()
+    // MEMORY: Use shared singleton instead of creating new instance
+    private let perplexityService = PerplexityService.shared
 
     // Note: We now use the SEARCH endpoint, not chat/completions
     private let searchBaseURL = "https://api.perplexity.ai/chat/completions"

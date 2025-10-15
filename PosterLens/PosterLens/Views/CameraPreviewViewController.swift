@@ -223,7 +223,9 @@ class CameraPreviewViewController: UIViewController {
                     self.updatePreviewLayerVideoOrientation()
                     
                     // Mark camera as ready after a short delay to ensure everything is settled
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // MEMORY: Added [weak self] to prevent retain cycle
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                        guard let self = self else { return }
                         print("Camera is now marked as ready")
                         self.isCameraReady = true
                     }

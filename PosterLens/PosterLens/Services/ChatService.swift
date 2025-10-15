@@ -1,11 +1,14 @@
 import Foundation
 
+// MEMORY: Converted to singleton to prevent memory bloat and preserve context cache
 class ChatService {
+    static let shared = ChatService()
+
     private let perplexityService: PerplexityService
     private var contextCache: [UUID: String] = [:] // Cache poster context by ID
-    
-    init(perplexityService: PerplexityService? = nil) {
-        self.perplexityService = perplexityService ?? PerplexityService()
+
+    private init(perplexityService: PerplexityService? = nil) {
+        self.perplexityService = perplexityService ?? PerplexityService.shared
     }
     
     // Generate a response for a user's question about a poster
