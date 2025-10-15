@@ -44,65 +44,80 @@ class OCRService {
         )
     }
     
-    // Main recognition method with options
-    func recognizeText(from image: UIImage, 
+    // Main recognition method with options - PERFORMANCE: Runs on background queue
+    func recognizeText(from image: UIImage,
                        options: OCROptions = .scientificPoster,
                        completion: @escaping (Result<String, Error>) -> Void) {
-        
+
         guard let cgImage = image.cgImage else {
-            completion(.failure(OCRError.imageConversionFailed))
+            DispatchQueue.main.async {
+                completion(.failure(OCRError.imageConversionFailed))
+            }
             return
         }
-        
-        // Create a new image-request handler
-        let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        
-        // Create a new request to recognize text
-        let request = VNRecognizeTextRequest { request, error in
-            if let error = error {
-                completion(.failure(error))
-                return
+
+        // PERFORMANCE OPTIMIZATION: Move Vision processing to background queue
+        // OCR is CPU-intensive and should never block the main thread
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Create a new image-request handler
+            let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+
+            // Create a new request to recognize text
+            let request = VNRecognizeTextRequest { request, error in
+                if let error = error {
+                    DispatchQueue.main.async {
+                        completion(.failure(error))
+                    }
+                    return
+                }
+
+                guard let observations = request.results as? [VNRecognizedTextObservation] else {
+                    DispatchQueue.main.async {
+                        completion(.failure(OCRError.recognitionFailed))
+                    }
+                    return
+                }
+
+                // Process the recognized text
+                let recognizedText = observations.compactMap { observation in
+                    // Get the top candidate
+                    observation.topCandidates(1).first?.string
+                }.joined(separator: "\n")
+
+                // Return to main thread for completion handler
+                DispatchQueue.main.async {
+                    if recognizedText.isEmpty {
+                        completion(.failure(OCRError.noTextFound))
+                    } else {
+                        completion(.success(recognizedText))
+                    }
+                }
             }
-            
-            guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                completion(.failure(OCRError.recognitionFailed))
-                return
+
+            // Configure the request based on options
+            request.recognitionLevel = options.recognitionLevel
+            request.usesLanguageCorrection = options.useLanguageCorrection
+
+            if let languages = options.recognitionLanguages {
+                request.recognitionLanguages = languages
             }
-            
-            // Process the recognized text
-            let recognizedText = observations.compactMap { observation in
-                // Get the top candidate
-                observation.topCandidates(1).first?.string
-            }.joined(separator: "\n")
-            
-            if recognizedText.isEmpty {
-                completion(.failure(OCRError.noTextFound))
-            } else {
-                completion(.success(recognizedText))
+
+            if let minHeight = options.minimumTextHeight {
+                request.minimumTextHeight = minHeight
             }
-        }
-        
-        // Configure the request based on options
-        request.recognitionLevel = options.recognitionLevel
-        request.usesLanguageCorrection = options.useLanguageCorrection
-        
-        if let languages = options.recognitionLanguages {
-            request.recognitionLanguages = languages
-        }
-        
-        if let minHeight = options.minimumTextHeight {
-            request.minimumTextHeight = minHeight
-        }
-        
-        if let customWords = options.customWords {
-            request.customWords = customWords
-        }
-        
-        do {
-            // Perform the text-recognition request
-            try requestHandler.perform([request])
-        } catch {
-            completion(.failure(error))
+
+            if let customWords = options.customWords {
+                request.customWords = customWords
+            }
+
+            do {
+                // Perform the text-recognition request
+                try requestHandler.perform([request])
+            } catch {
+                DispatchQueue.main.async {
+                    completion(.failure(error))
+                }
+            }
         }
     }
     

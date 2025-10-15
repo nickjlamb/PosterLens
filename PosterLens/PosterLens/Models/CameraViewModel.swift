@@ -1,6 +1,8 @@
 import SwiftUI
 import Combine
 
+// PERFORMANCE: @MainActor ensures all @Published property updates happen on main thread
+@MainActor
 class CameraViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var showingError = false

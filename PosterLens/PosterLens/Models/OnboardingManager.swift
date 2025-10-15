@@ -2,6 +2,8 @@ import SwiftUI
 import Combine
 
 /// Manages the onboarding experience for the PosterLens app
+// PERFORMANCE: @MainActor ensures all @Published property updates happen on main thread
+@MainActor
 class OnboardingManager: ObservableObject {
     // Enable onboarding by default
     let onboardingEnabled = true

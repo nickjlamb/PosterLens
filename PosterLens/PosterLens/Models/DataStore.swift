@@ -2,6 +2,8 @@ import Foundation
 import Combine
 import UIKit
 
+// PERFORMANCE: @MainActor ensures all @Published property updates happen on main thread
+@MainActor
 class DataStore: ObservableObject {
     @Published var savedScans: [PosterScan] = []
     @Published var conversations: [Conversation] = []
@@ -64,64 +66,87 @@ class DataStore: ObservableObject {
         return savedScans.first(where: { $0.id == id })
     }
     
-    private func getScansFileURL() -> URL {
+    // nonisolated allows this to be called from background queues
+    nonisolated private func getScansFileURL() -> URL {
         let fileManager = FileManager.default
         let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         return documentsDirectory.appendingPathComponent("PosterLensScans.json")
     }
     
+    // PERFORMANCE: Save scans to file on background queue
     private func saveScans() {
-        do {
-            let encoder = JSONEncoder()
-            let data = try encoder.encode(savedScans)
-            
-            // Save to file instead of UserDefaults to avoid size limit
-            try data.write(to: getScansFileURL())
-            
-            // Store a flag in UserDefaults to indicate data has been migrated
-            UserDefaults.standard.set(true, forKey: "scansSavedToFile")
-            
-            // Remove large data from UserDefaults if it exists
-            if UserDefaults.standard.object(forKey: saveKey) != nil {
-                UserDefaults.standard.removeObject(forKey: saveKey)
-                print("Removed large scan data from UserDefaults")
+        let scansToSave = savedScans  // Copy to avoid capturing self
+
+        // PERFORMANCE OPTIMIZATION: Move file I/O to background queue
+        DispatchQueue.global(qos: .utility).async {
+            do {
+                let encoder = JSONEncoder()
+                let data = try encoder.encode(scansToSave)
+
+                // Save to file instead of UserDefaults to avoid size limit
+                try data.write(to: self.getScansFileURL())
+
+                // Store a flag in UserDefaults to indicate data has been migrated
+                UserDefaults.standard.set(true, forKey: "scansSavedToFile")
+
+                // Remove large data from UserDefaults if it exists
+                if UserDefaults.standard.object(forKey: self.saveKey) != nil {
+                    UserDefaults.standard.removeObject(forKey: self.saveKey)
+                    print("Removed large scan data from UserDefaults")
+                }
+            } catch {
+                print("Failed to save scans: \(error.localizedDescription)")
             }
-        } catch {
-            print("Failed to save scans: \(error.localizedDescription)")
         }
     }
     
+    // PERFORMANCE: Load scans from file on background queue
     private func loadSavedScans() {
         let fileURL = getScansFileURL()
         let fileManager = FileManager.default
-        
-        // First, try to load from file
-        if fileManager.fileExists(atPath: fileURL.path) {
-            do {
-                let data = try Data(contentsOf: fileURL)
-                let decoder = JSONDecoder()
-                savedScans = try decoder.decode([PosterScan].self, from: data)
-                print("Successfully loaded scans from file")
-                return
-            } catch {
-                print("Failed to load saved scans from file: \(error.localizedDescription)")
+
+        // PERFORMANCE OPTIMIZATION: Move file I/O to background queue
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            // First, try to load from file
+            if fileManager.fileExists(atPath: fileURL.path) {
+                do {
+                    let data = try Data(contentsOf: fileURL)
+                    let decoder = JSONDecoder()
+                    let loadedScans = try decoder.decode([PosterScan].self, from: data)
+
+                    // Update on main thread
+                    DispatchQueue.main.async {
+                        self.savedScans = loadedScans
+                        print("Successfully loaded scans from file")
+                    }
+                    return
+                } catch {
+                    print("Failed to load saved scans from file: \(error.localizedDescription)")
+                }
             }
-        }
-        
-        // If file doesn't exist or loading failed, try to load from UserDefaults (migration path)
-        if let data = UserDefaults.standard.data(forKey: saveKey) {
-            do {
-                let decoder = JSONDecoder()
-                savedScans = try decoder.decode([PosterScan].self, from: data)
-                print("Successfully loaded scans from UserDefaults, will migrate to file")
-                
-                // Migrate to file storage
-                saveScans()
-            } catch {
-                print("Failed to load saved scans from UserDefaults: \(error.localizedDescription)")
-                
-                // If loading fails, reset the saved data
-                UserDefaults.standard.removeObject(forKey: saveKey)
+
+            // If file doesn't exist or loading failed, try to load from UserDefaults (migration path)
+            if let data = UserDefaults.standard.data(forKey: self.saveKey) {
+                do {
+                    let decoder = JSONDecoder()
+                    let loadedScans = try decoder.decode([PosterScan].self, from: data)
+
+                    // Update on main thread
+                    DispatchQueue.main.async {
+                        self.savedScans = loadedScans
+                        print("Successfully loaded scans from UserDefaults, will migrate to file")
+
+                        // Migrate to file storage
+                        self.saveScans()
+                    }
+                } catch {
+                    print("Failed to load saved scans from UserDefaults: \(error.localizedDescription)")
+
+                    // If loading fails, reset the saved data
+                    UserDefaults.standard.removeObject(forKey: self.saveKey)
+                }
             }
         }
     }
@@ -292,65 +317,87 @@ class DataStore: ObservableObject {
     }
     
     /// Save conversations to UserDefaults
-    private func getConversationsFileURL() -> URL {
+    // nonisolated allows this to be called from background queues
+    nonisolated private func getConversationsFileURL() -> URL {
         let fileManager = FileManager.default
         let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         return documentsDirectory.appendingPathComponent("PosterLensConversations.json")
     }
     
+    // PERFORMANCE: Save conversations to file on background queue
     private func saveConversations() {
-        do {
-            let encoder = JSONEncoder()
-            let data = try encoder.encode(conversations)
-            
-            // Save to file instead of UserDefaults to avoid size limit
-            try data.write(to: getConversationsFileURL())
-            
-            // Store a flag in UserDefaults to indicate data has been migrated
-            UserDefaults.standard.set(true, forKey: "conversationsSavedToFile")
-            
-            // Remove large data from UserDefaults if it exists
-            if UserDefaults.standard.object(forKey: conversationsKey) != nil {
-                UserDefaults.standard.removeObject(forKey: conversationsKey)
-                print("Removed large conversation data from UserDefaults")
+        let conversationsToSave = conversations  // Copy to avoid capturing self
+
+        // PERFORMANCE OPTIMIZATION: Move file I/O to background queue
+        DispatchQueue.global(qos: .utility).async {
+            do {
+                let encoder = JSONEncoder()
+                let data = try encoder.encode(conversationsToSave)
+
+                // Save to file instead of UserDefaults to avoid size limit
+                try data.write(to: self.getConversationsFileURL())
+
+                // Store a flag in UserDefaults to indicate data has been migrated
+                UserDefaults.standard.set(true, forKey: "conversationsSavedToFile")
+
+                // Remove large data from UserDefaults if it exists
+                if UserDefaults.standard.object(forKey: self.conversationsKey) != nil {
+                    UserDefaults.standard.removeObject(forKey: self.conversationsKey)
+                    print("Removed large conversation data from UserDefaults")
+                }
+            } catch {
+                print("Failed to save conversations: \(error.localizedDescription)")
             }
-        } catch {
-            print("Failed to save conversations: \(error.localizedDescription)")
         }
     }
     
-    /// Load conversations from file or UserDefaults
+    /// Load conversations from file or UserDefaults - PERFORMANCE: Runs on background queue
     private func loadConversations() {
         let fileURL = getConversationsFileURL()
         let fileManager = FileManager.default
-        
-        // First, try to load from file
-        if fileManager.fileExists(atPath: fileURL.path) {
-            do {
-                let data = try Data(contentsOf: fileURL)
-                let decoder = JSONDecoder()
-                conversations = try decoder.decode([Conversation].self, from: data)
-                print("Successfully loaded conversations from file")
-                return
-            } catch {
-                print("Failed to load conversations from file: \(error.localizedDescription)")
+
+        // PERFORMANCE OPTIMIZATION: Move file I/O to background queue
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            // First, try to load from file
+            if fileManager.fileExists(atPath: fileURL.path) {
+                do {
+                    let data = try Data(contentsOf: fileURL)
+                    let decoder = JSONDecoder()
+                    let loadedConversations = try decoder.decode([Conversation].self, from: data)
+
+                    // Update on main thread
+                    DispatchQueue.main.async {
+                        self.conversations = loadedConversations
+                        print("Successfully loaded conversations from file")
+                    }
+                    return
+                } catch {
+                    print("Failed to load conversations from file: \(error.localizedDescription)")
+                }
             }
-        }
-        
-        // If file doesn't exist or loading failed, try to load from UserDefaults (migration path)
-        if let data = UserDefaults.standard.data(forKey: conversationsKey) {
-            do {
-                let decoder = JSONDecoder()
-                conversations = try decoder.decode([Conversation].self, from: data)
-                print("Successfully loaded conversations from UserDefaults, will migrate to file")
-                
-                // Migrate to file storage
-                saveConversations()
-            } catch {
-                print("Failed to load conversations from UserDefaults: \(error.localizedDescription)")
-                
-                // If loading fails, reset the saved data
-                UserDefaults.standard.removeObject(forKey: conversationsKey)
+
+            // If file doesn't exist or loading failed, try to load from UserDefaults (migration path)
+            if let data = UserDefaults.standard.data(forKey: self.conversationsKey) {
+                do {
+                    let decoder = JSONDecoder()
+                    let loadedConversations = try decoder.decode([Conversation].self, from: data)
+
+                    // Update on main thread
+                    DispatchQueue.main.async {
+                        self.conversations = loadedConversations
+                        print("Successfully loaded conversations from UserDefaults, will migrate to file")
+
+                        // Migrate to file storage
+                        self.saveConversations()
+                    }
+                } catch {
+                    print("Failed to load conversations from UserDefaults: \(error.localizedDescription)")
+
+                    // If loading fails, reset the saved data
+                    UserDefaults.standard.removeObject(forKey: self.conversationsKey)
+                }
             }
         }
     }

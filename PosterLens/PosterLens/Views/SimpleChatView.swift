@@ -293,14 +293,12 @@ struct SimpleChatView: View {
         
         // Show loading
         isLoading = true
-        
+
         // Haptic
         HapticManager.shared.mediumImpact()
-        
-        // Generate response after delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            generateResponse(for: text)
-        }
+
+        // PERFORMANCE: Generate response immediately (removed artificial 1.5s delay)
+        generateResponse(for: text)
     }
     
     // Generate AI response
