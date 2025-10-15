@@ -73,19 +73,19 @@ struct ScanCardView: View {
                             )
                     }
                     
-                    // Title overlay
-                    VStack(alignment: .leading, spacing: 2) {
+                    // Title overlay - UX: Use DesignSystem spacing
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.tiny) {
                         Text(scan.title)
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .lineLimit(1)
-                        
+
                         Text(scan.dateFormatted)
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
+                    .padding(DesignSystem.Spacing.extraSmall)
                     .background(Material.regularMaterial)
                 }
             }
@@ -108,9 +108,10 @@ struct ScanCardView: View {
                 }
             }
             
-            // Selection overlay
+            // Selection overlay - UX: Add haptic feedback
             if isSelectionMode {
                 Button(action: {
+                    HapticManager.shared.selection()
                     onSelect?(!isSelected)
                 }) {
                     ZStack {
@@ -139,20 +140,23 @@ struct ScanCardView: View {
                 }
             }
         }
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 1)
-        // Add selection highlight
+        .cornerRadius(DesignSystem.CornerRadius.large)  // UX: Use DesignSystem
+        .shadowStyle(DesignSystem.Shadow.card)  // UX: Use DesignSystem shadow
+        // Add selection highlight with smooth animation
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 3)
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .stroke(isSelected ? DesignSystem.Colors.brandBlue : Color.clear, lineWidth: 3)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
         )
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isSelected ? Color.blue.opacity(0.1) : Color.clear)
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(isSelected ? DesignSystem.Colors.brandBlue.opacity(0.1) : Color.clear)
+                .animation(.easeInOut(duration: 0.2), value: isSelected)
         )
-        // Add long press gesture to enter selection mode
+        // Add long press gesture to enter selection mode - UX: Add haptic feedback
         .onLongPressGesture {
             if !isSelectionMode {
+                HapticManager.shared.mediumImpact()
                 // Trigger selection mode with this item selected
                 onSelect?(true)
             }
@@ -163,10 +167,9 @@ struct ScanCardView: View {
             Button("Delete", role: .destructive) {
                 // Delete the scan
                 dataStore.deleteScan(withID: scan.id)
-                
-                // Provide haptic feedback
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
+
+                // UX: Use HapticManager for consistent feedback
+                HapticManager.shared.success()
             }
         } message: {
             Text("This will permanently delete this scan. This action cannot be undone.")
@@ -214,23 +217,22 @@ struct PlaceholderCardView: View {
             }
         }
         .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-        // Make the entire card tappable
+        // Make the entire card tappable - UX: Use HapticManager
         .onTapGesture {
-            // Provide haptic feedback
-            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-            impactFeedback.impactOccurred()
-            
-            // Visual feedback
-            withAnimation {
+            // UX: Use HapticManager for consistent feedback
+            HapticManager.shared.mediumImpact()
+
+            // Visual feedback with smooth animation
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 isPressed = true
             }
-            
+
             // Reset after animation
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                withAnimation {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     isPressed = false
                 }
-                
+
                 // After visual feedback completes, directly show the camera
                 if let onTap = onTap {
                     onTap()
