@@ -52,7 +52,6 @@ struct CameraView: View {
     @State private var animateScanning = false
     @State private var offsetY: CGFloat = 50
     @State private var opacity: Double = 0
-    @State private var showingAboutView = false
     @State private var showingScanningGuidelines = false
 
     // Animation properties
@@ -119,54 +118,42 @@ struct CameraView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarHidden(true)
             .safeAreaInset(edge: .top) {
-                ZStack(alignment: .topTrailing) {
-                    // Main header content
-                    Group {
-                        if UIDevice.current.orientation.isLandscape {
-                            // Landscape header - use HStack and position to the left
-                            HStack(spacing: 8) {
-                                Spacer().frame(width: 16)
+                // Main header content
+                Group {
+                    if UIDevice.current.orientation.isLandscape {
+                        // Landscape header - use HStack and position to the left
+                        HStack(spacing: 8) {
+                            Spacer().frame(width: 16)
 
-                                Text("PosterLens")
-                                    .font(.title3.bold())
-                                    .foregroundColor(.white)
+                            Text("PosterLens")
+                                .font(.title3.bold())
+                                .foregroundColor(.white)
 
-                                Text("Your AI Scientific Conference Companion")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white.opacity(0.9))
-                                    .padding(.leading, 4)
+                            Text("Your AI Scientific Conference Companion")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white.opacity(0.9))
+                                .padding(.leading, 4)
 
-                                Spacer()
-                            }
-                            .frame(height: 44)
-                        } else {
-                            // Portrait header - use traditional VStack centered
-                            VStack(spacing: 4) {
-                                Text("PosterLens")
-                                    .font(.title.bold())
-                                    .foregroundColor(.white)
+                            Spacer()
+                        }
+                        .frame(height: 44)
+                    } else {
+                        // Portrait header - use traditional VStack centered
+                        VStack(spacing: 4) {
+                            Text("PosterLens")
+                                .font(.title.bold())
+                                .foregroundColor(.white)
 
-                                Text("Your AI Scientific Conference Companion")
-                                    .font(.headline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
+                            Text("Your AI Scientific Conference Companion")
+                                .font(.headline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white.opacity(0.9))
                         }
                     }
-                    .padding(.top, 10)
-                    .padding(.bottom, 5)
-
-                    // Info button in top-right corner
-                    Button(action: {
-                        showingAboutView = true
-                    }) {
-                        Image(systemName: "info.circle")
-                            .foregroundColor(.white)
-                            .font(.system(size: 24))
-                            .padding(16)
-                    }
                 }
+                .padding(.top, 10)
+                .padding(.bottom, 5)
             }
             .alert("Error", isPresented: $viewModel.showingError) {
                 Button("OK", role: .cancel) {}
@@ -190,10 +177,6 @@ struct CameraView: View {
             .onChange(of: dataStore.savedScans.count) { _ in
                 // Force refresh of recent scans
                 refreshID = UUID()
-            }
-            .sheet(isPresented: $showingAboutView) {
-                AboutView()
-                    .environmentObject(onboardingManager)
             }
             .sheet(isPresented: $showingScanningGuidelines) {
                 ScanningGuidelinesView()
