@@ -25,22 +25,23 @@ struct ImprovedHistoryView: View {
     @EnvironmentObject private var dataStore: DataStore
     @State private var showingDeleteAlert = false
     @State private var showingExportSheet = false
+    @State private var showingAboutView = false
     @State private var exportURL: URL?
     @State private var exportURLs: [URL] = []
     @State private var gridColumns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 2)
     @State private var isEditMode: EditMode = .inactive
     @State private var viewHeight: CGFloat = 0
-    
+
     // Selection mode states
     @State private var isSelectionMode = false
     @State private var selectedScanIDs = Set<UUID>()
     @State private var showingBatchDeleteAlert = false
     @State private var showingExportOptions = false
-    
+
     // Animation states
     @State private var scrollOffset: CGFloat = 0
     @State private var appeared = false
-    
+
     // Binding to the selected tab in ContentView
     var selectedTab: Binding<Int>?
     
@@ -164,10 +165,18 @@ struct ImprovedHistoryView: View {
                             
                             Menu {
                                 Button(action: {
+                                    showingAboutView = true
+                                }) {
+                                    Label("About", systemImage: "info.circle")
+                                }
+
+                                Divider()
+
+                                Button(action: {
                                     // Haptic feedback
                                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                                     impactFeedback.impactOccurred()
-                                    
+
                                     // Toggle between 1, 2 and 3 columns with spring animation
                                     withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                                         if gridColumns.count == 1 {
@@ -193,14 +202,14 @@ struct ImprovedHistoryView: View {
                                 }) {
                                     // Dynamic label based on current column count and next state
                                     Label(
-                                        gridColumns.count == 1 ? "Two Columns" : 
+                                        gridColumns.count == 1 ? "Two Columns" :
                                         (gridColumns.count == 2 ? "Three Columns" : "Single Column"),
                                         systemImage: gridColumns.count == 1 ? "square.grid.2x2" :
                                         (gridColumns.count == 2 ? "square.grid.3x2" : "rectangle")
                                     )
                                     .animation(.easeOut(duration: 0.2), value: gridColumns.count)
                                 }
-                                
+
                                 Button(action: {
                                     // Export all scans as PDF
                                     if let urls = dataStore.exportScansAsPDF() {
@@ -210,7 +219,7 @@ struct ImprovedHistoryView: View {
                                 }) {
                                     Label("Export All as PDF", systemImage: "doc.richtext")
                                 }
-                                
+
                                 Button(action: {
                                     // Export all scans as JSON (legacy option)
                                     exportURL = dataStore.exportScans()
@@ -220,7 +229,9 @@ struct ImprovedHistoryView: View {
                                 }) {
                                     Label("Export All as JSON", systemImage: "square.and.arrow.up")
                                 }
-                                
+
+                                Divider()
+
                                 Button(role: .destructive, action: {
                                     showingDeleteAlert = true
                                 }) {
@@ -300,6 +311,9 @@ struct ImprovedHistoryView: View {
                 } else if !exportURLs.isEmpty {
                     ShareSheet(items: exportURLs)
                 }
+            }
+            .sheet(isPresented: $showingAboutView) {
+                AboutView()
             }
         }
     }
