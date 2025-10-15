@@ -274,17 +274,17 @@ struct ButtonRowView: View {
                 }
             }
         }
-        .navigationDestination(isPresented: $showChatView) {
-            SimpleChatView(posterScan: scan)
-                .environmentObject(dataStore)
+        .sheet(isPresented: $showOpenAIChatView) {
+            NavigationView {
+                OpenAIChatView(posterScan: scan)
+                    .environmentObject(dataStore)
+            }
         }
-        .navigationDestination(isPresented: $showOpenAIChatView) {
-            OpenAIChatView(posterScan: scan)
-                .environmentObject(dataStore)
-        }
-        .navigationDestination(isPresented: $showRelatedResearchView) {
-            RelatedResearchView(posterScan: scan)
-                .environmentObject(dataStore)
+        .sheet(isPresented: $showRelatedResearchView) {
+            NavigationView {
+                RelatedResearchView(posterScan: scan)
+                    .environmentObject(dataStore)
+            }
         }
         .alert(isPresented: $showingError) {
             Alert(
