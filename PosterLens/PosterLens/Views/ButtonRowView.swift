@@ -249,12 +249,26 @@ struct ButtonRowView: View {
                     QuestionListView(questions: questions)
                         .navigationTitle("Questions to Ask the Author")
                         .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") {
+                                    showQuestionsView = false
+                                }
+                            }
+                        }
                 } else {
                     Text("Generating questions... Please wait or try again.")
                         .padding()
                         .multilineTextAlignment(.center)
                         .navigationTitle("Questions to Ask the Author")
                         .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") {
+                                    showQuestionsView = false
+                                }
+                            }
+                        }
                 }
             }
         }
@@ -265,12 +279,26 @@ struct ButtonRowView: View {
                         .navigationTitle("Research Directions")
                         .navigationBarTitleDisplayMode(.inline)
                         .padding()
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") {
+                                    showDirectionsView = false
+                                }
+                            }
+                        }
                 } else {
                     Text("Generating research directions... Please wait or try again.")
                         .padding()
                         .multilineTextAlignment(.center)
                         .navigationTitle("Research Directions")
                         .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Done") {
+                                    showDirectionsView = false
+                                }
+                            }
+                        }
                 }
             }
         }
@@ -278,12 +306,26 @@ struct ButtonRowView: View {
             NavigationView {
                 OpenAIChatView(posterScan: scan)
                     .environmentObject(dataStore)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                showOpenAIChatView = false
+                            }
+                        }
+                    }
             }
         }
         .sheet(isPresented: $showRelatedResearchView) {
             NavigationView {
                 RelatedResearchView(posterScan: scan)
                     .environmentObject(dataStore)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                showRelatedResearchView = false
+                            }
+                        }
+                    }
             }
         }
         .alert(isPresented: $showingError) {
