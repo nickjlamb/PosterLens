@@ -87,7 +87,7 @@ class PerplexityRelatedResearchService {
             "messages": [
                 [
                     "role": "system",
-                    "content": "You are a research assistant. Find 3-5 real, published scientific papers related to the query. For each paper, provide: exact title, authors, journal, year, DOI, and PubMed URL if available. Return results as a structured list."
+                    "content": "You are a research citation assistant. Return ONLY a numbered list of papers in Vancouver citation style. NO preamble, NO explanations, NO markdown formatting. Start immediately with paper 1."
                 ],
                 [
                     "role": "user",
@@ -161,14 +161,19 @@ class PerplexityRelatedResearchService {
         return """
         Find 3-5 recent published research papers (2020-2024) related to: \(titleKeywords) \(contextKeywords)
 
-        For each paper, provide:
-        - Exact paper title
-        - Authors (first author + et al.)
-        - Journal name and year
-        - DOI number
-        - PubMed ID or URL if available
+        CRITICAL FORMATTING RULES:
+        - NO preamble text like "Here are..." or "These papers..."
+        - NO concluding text like "If you need more..." or "Let me know..."
+        - Start IMMEDIATELY with: 1. Author A, Author B, et al.
+        - Use Vancouver citation style
+        - NO bold, NO italics, NO asterisks, NO other markdown
+        - NO "relevance" explanations
 
-        Focus on high-impact journals and papers most relevant to the research topic.
+        Format EXACTLY like this:
+        1. Smith J, Johnson A, et al. Novel cancer immunotherapy approaches. Nature. 2023;615(7950):123-130. DOI: 10.1038/s41586-023-12345. PMID: 36890123.
+        2. Brown K, Davis M. Machine learning in drug discovery. Cell. 2024;187(3):456-470. DOI: 10.1016/j.cell.2024.01.023.
+
+        Focus on high-impact journals. Include DOI and PMID when available.
         """
     }
 
@@ -176,8 +181,48 @@ class PerplexityRelatedResearchService {
     private func parsePapersFromContent(_ content: String, citationURLs: [String]) -> [Citation] {
         var citations: [Citation] = []
 
+        // Strip out preamble and conclusion text
+        var cleanedContent = content
+
+        // Remove common preamble patterns
+        let preamblePatterns = [
+            "Here are.*?papers.*?:",
+            "I found.*?papers.*?:",
+            "Based on.*?research.*?:",
+            "These.*?papers.*?:",
+            "Below.*?papers.*?:",
+            "The following.*?papers.*?:"
+        ]
+
+        for pattern in preamblePatterns {
+            if let range = cleanedContent.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
+                cleanedContent = String(cleanedContent[range.upperBound...])
+                break
+            }
+        }
+
+        // Remove concluding text
+        let conclusionPatterns = [
+            "(?:If|Let me know).*?(?:more|additional|further).*",
+            "Feel free.*",
+            "Please.*?(?:more|additional).*"
+        ]
+
+        for pattern in conclusionPatterns {
+            if let range = cleanedContent.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
+                cleanedContent = String(cleanedContent[..<range.lowerBound])
+                break
+            }
+        }
+
+        // Remove all markdown formatting
+        cleanedContent = cleanedContent.replacingOccurrences(of: "**", with: "")
+        cleanedContent = cleanedContent.replacingOccurrences(of: "__", with: "")
+        cleanedContent = cleanedContent.replacingOccurrences(of: "*", with: "")
+        cleanedContent = cleanedContent.replacingOccurrences(of: "_", with: "")
+
         // Split into paper sections (look for numbered items or clear breaks)
-        let sections = content.components(separatedBy: "\n\n")
+        let sections = cleanedContent.components(separatedBy: "\n\n")
 
         var urlIndex = 0
         for section in sections {
@@ -275,7 +320,7 @@ class PerplexityRelatedResearchService {
                     doi: doi,
                     url: url,
                     abstract: nil,
-                    relevance: "Related to the research presented in the poster"
+                    relevance: nil  // No relevance text - keep it clean
                 )
 
                 citations.append(citation)
@@ -324,8 +369,8 @@ class PerplexityRelatedResearchService {
                 year: year,
                 doi: nil,
                 url: urlString,
-                abstract: "Research paper related to the poster topic",
-                relevance: "Found through academic database search"
+                abstract: nil,
+                relevance: nil  // No relevance text - keep it clean
             )
         }
     }
