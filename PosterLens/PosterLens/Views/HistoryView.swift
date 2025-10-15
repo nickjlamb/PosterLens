@@ -115,7 +115,8 @@ struct ImprovedHistoryView: View {
             }
             .navigationTitle(isSelectionMode ? "\(selectedScanIDs.count) Selected" : "Scan History")
             .navigationBarTitleDisplayMode(.inline)
-            .preferredColorScheme(.dark) // Use dark mode for the entire screen to ensure white navigation text
+            .toolbarBackground(.clear, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 // Leading items (left side)
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -127,18 +128,16 @@ struct ImprovedHistoryView: View {
                                 selectedScanIDs.removeAll()
                             }
                         }
-                        .foregroundColor(.white)
                     } else {
                         EditButton()
                             .disabled(dataStore.savedScans.isEmpty)
                             .environment(\.editMode, $isEditMode)
-                            .foregroundColor(.white)
                     }
                 }
                 
                 // Trailing items (right side)
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
+                    HStack(spacing: 12) {
                         if isSelectionMode {
                             Button(selectedScanIDs.count == dataStore.savedScans.count ? "Deselect All" : "Select All") {
                                 withAnimation {
@@ -151,7 +150,6 @@ struct ImprovedHistoryView: View {
                                     }
                                 }
                             }
-                            .foregroundColor(.white)
                         } else {
                             // Only show Select button if there are scans
                             if !dataStore.savedScans.isEmpty {
@@ -160,9 +158,8 @@ struct ImprovedHistoryView: View {
                                         isSelectionMode = true
                                     }
                                 }
-                                .foregroundColor(.white)
                             }
-                            
+
                             Menu {
                                 Button(action: {
                                     showingAboutView = true
@@ -239,7 +236,7 @@ struct ImprovedHistoryView: View {
                                 }
                             } label: {
                                 Image(systemName: "ellipsis.circle")
-                                    .foregroundColor(.white)
+                                    .imageScale(.large)
                             }
                         }
                     }
