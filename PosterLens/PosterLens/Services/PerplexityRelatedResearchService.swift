@@ -38,10 +38,12 @@ class PerplexityRelatedResearchService {
     ]
 
     /// Find related research papers for a poster scan
-    /// - Parameter scan: The poster scan to find related papers for
+    /// - Parameters:
+    ///   - scan: The poster scan to find related papers for
+    ///   - skipEnrichment: Skip slow PubMed enrichment for faster results (default: false)
     /// - Returns: Array of up to 5 citations from trusted academic sources
-    /// - Note: Uses Perplexity Search API with domain filters + PubMed enrichment
-    func findRelatedResearch(from scan: PosterScan) async throws -> [Citation] {
+    /// - Note: Uses Perplexity Search API with domain filters. PubMed enrichment adds 30-60s.
+    func findRelatedResearch(from scan: PosterScan, skipEnrichment: Bool = false) async throws -> [Citation] {
         // Validate API key
         if !perplexityService.hasValidAPIKey {
             throw NetworkError.missingAPIKey(service: "Perplexity")
@@ -55,7 +57,16 @@ class PerplexityRelatedResearchService {
 
         print("✅ Found \(citations.count) papers from Search API")
 
-        // Enrich with PubMed for additional validation and metadata
+        // OPTIMIZATION: Skip PubMed enrichment for faster results
+        // Domain filtering already ensures high-quality sources
+        if skipEnrichment {
+            print("⚡️ Skipping PubMed enrichment for faster results")
+            let finalCitations = citations.prefix(5)
+            return Array(finalCitations)
+        }
+
+        // Enrich with PubMed for additional validation and metadata (slower)
+        print("🔍 Enriching with PubMed (this may take 30-60 seconds)...")
         let enrichedCitations = await PubMedAPI.enrichCitations(citations)
 
         print("✅ Enriched \(enrichedCitations.count) papers with PubMed data")
