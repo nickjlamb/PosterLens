@@ -1,7 +1,17 @@
 import Foundation
 
-/// A service for retrieving related research papers using the Perplexity Search API (not chat) and PubMed validation
-/// This version uses the SEARCH API which actually searches the web for real papers with valid links
+/// Service for finding related academic research papers using Perplexity Search API
+///
+/// **Key Features:**
+/// - Uses Perplexity Search API with domain filtering for trusted sources only
+/// - Searches 14 academic domains: PubMed, Nature, Science, Cell, arXiv, and more
+/// - Enriches results with PubMed metadata for validation
+/// - Automatic retry logic with exponential backoff via NetworkRequestHelper
+/// - Safe JSON parsing prevents crashes on malformed responses
+///
+/// **Domain Filtering (NEW):**
+/// The service uses `search_domain_filter` to restrict searches to trusted academic sources.
+/// This ensures high-quality, verifiable citations from reputable journals and databases.
 class PerplexityRelatedResearchService {
     // MEMORY: Use shared singleton instead of creating new instance
     private let perplexityService = PerplexityService.shared
@@ -27,16 +37,20 @@ class PerplexityRelatedResearchService {
         "ieee.org"
     ]
 
-    // Main method - find related research using Search API
+    /// Find related research papers for a poster scan
+    /// - Parameter scan: The poster scan to find related papers for
+    /// - Returns: Array of up to 5 citations from trusted academic sources
+    /// - Note: Uses Perplexity Search API with domain filters + PubMed enrichment
     func findRelatedResearch(from scan: PosterScan) async throws -> [Citation] {
         // Validate API key
         if !perplexityService.hasValidAPIKey {
-            throw PerplexityError.missingAPIKey
+            throw NetworkError.missingAPIKey(service: "Perplexity")
         }
 
-        print("🔍 Starting Related Research search using Perplexity Search API...")
+        print("🔍 Starting Related Research search using Perplexity Search API with domain filters...")
+        print("📚 Searching trusted domains: PubMed, Nature, Science, Cell, arXiv, and more")
 
-        // Use Perplexity Search API with online search enabled
+        // Use Perplexity Search API with domain filtering
         let citations = try await searchWithPerplexitySearchAPI(scan: scan)
 
         print("✅ Found \(citations.count) papers from Search API")
@@ -68,10 +82,13 @@ class PerplexityRelatedResearchService {
         }
     }
 
-    // Use Perplexity Search API (not chat model) to find real papers
+    /// Search for related papers using Perplexity Search API with domain filtering
+    /// - Parameter scan: The poster scan to find related research for
+    /// - Returns: Array of citations from trusted academic sources
+    /// - Note: Uses domain filters to only search trusted academic sources (PubMed, Nature, Science, etc.)
     private func searchWithPerplexitySearchAPI(scan: PosterScan) async throws -> [Citation] {
         guard let url = URL(string: searchBaseURL) else {
-            throw PerplexityError.invalidURL
+            throw NetworkError.badRequest("Invalid Search API URL")
         }
 
         var request = URLRequest(url: url)
@@ -83,6 +100,7 @@ class PerplexityRelatedResearchService {
         let searchQuery = createSearchQuery(from: scan)
 
         // CRITICAL: Use return_citations=true and search_domain_filter to get real web results
+        // Domain filters ensure we only get results from trusted academic sources
         let requestBody: [String: Any] = [
             "model": "sonar",  // Use sonar (search model), not sonar-pro (chat model)
             "messages": [
@@ -100,23 +118,30 @@ class PerplexityRelatedResearchService {
             "return_citations": true,  // CRITICAL: Get actual URLs from search results
             "return_images": false,
             "return_related_questions": false,
-            "search_domain_filter": academicDomains,  // Only search academic sources
+            "search_domain_filter": academicDomains,  // ✅ NEW: Domain filters for trusted sources only
             "search_recency_filter": "year"  // Prefer recent papers (last year)
         ]
 
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-
-        let (data, _) = try await URLSession.shared.data(for: request)
-
-        // Parse the response
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw PerplexityError.invalidResponse
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        } catch {
+            throw NetworkError.malformedData
         }
 
-        // Check for errors
-        if let errorInfo = json["error"] as? [String: Any],
-           let message = errorInfo["message"] as? String {
-            throw PerplexityError.apiError(message)
+        // Use NetworkRequestHelper for automatic retry and timeout handling
+        let (data, _) = try await NetworkRequestHelper.makeRequest(
+            request,
+            config: .default
+        )
+
+        // Safe JSON parsing with error checking
+        guard let json = SafeJSONParser.parseToDictionary(data) else {
+            throw NetworkError.malformedData
+        }
+
+        // Check for API errors using SafeJSONParser
+        if let errorMessage = SafeJSONParser.extractErrorMessage(data) {
+            throw NetworkError.apiError(service: "Perplexity", message: errorMessage)
         }
 
         // Extract citations from the response
