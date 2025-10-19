@@ -169,9 +169,9 @@ struct RelatedResearchView: View {
             
             do {
                 // Use the async version of findRelatedResearch
-                // OPTIMIZATION: Skip PubMed enrichment for faster results (reduces time from 60s to ~10s)
-                // Domain filtering already ensures high-quality sources
-                let papers = try await relatedResearchService.findRelatedResearch(from: posterScan, skipEnrichment: true)
+                // NEW STRATEGY: Enable PubMed enrichment to get REAL metadata
+                // We now extract PMIDs/DOIs from URLs, so enrichment is faster and accurate
+                let papers = try await relatedResearchService.findRelatedResearch(from: posterScan, skipEnrichment: false)
                 
                 await MainActor.run {
                     // Ensure the animation completes
@@ -207,8 +207,8 @@ struct RelatedResearchView: View {
     
     // Helper function to advance the step indicator asynchronously
     private func advanceStepIndicator() async {
-        // OPTIMIZATION: Faster timing to match the ~10-second search duration (skipping PubMed enrichment)
-        try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds - initial delay before first step
+        // NEW TIMING: Account for Perplexity Search + PubMed enrichment (~15-20 seconds total)
+        try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds - Perplexity search
 
         await MainActor.run {
             searchStepIndex = 2
@@ -220,14 +220,13 @@ struct RelatedResearchView: View {
             searchStepIndex = 3
         }
 
-        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds - finalizing
+        try? await Task.sleep(nanoseconds: 8_000_000_000) // 8 seconds - PubMed enrichment (faster now with PMIDs)
 
         await MainActor.run {
             searchStepIndex = 4
         }
 
         // The final step will remain visible until the search completes naturally
-        // which should take about 2-3 more seconds
     }
     
     // These methods have been moved to the dedicated subviews
@@ -709,10 +708,10 @@ struct StepIndicatorView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            stepRow(number: 1, text: "Searching academic databases", isActive: true)
-            stepRow(number: 2, text: "Parsing results", isActive: searchStepIndex >= 2)
-            stepRow(number: 3, text: "Verifying citations", isActive: searchStepIndex >= 3)
-            stepRow(number: 4, text: "Finalizing", isActive: searchStepIndex >= 4)
+            stepRow(number: 1, text: "Searching 14 academic databases", isActive: true)
+            stepRow(number: 2, text: "Extracting paper URLs & metadata", isActive: searchStepIndex >= 2)
+            stepRow(number: 3, text: "Validating with PubMed", isActive: searchStepIndex >= 3)
+            stepRow(number: 4, text: "Finalizing citations", isActive: searchStepIndex >= 4)
         }
     }
     

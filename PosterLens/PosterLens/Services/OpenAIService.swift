@@ -177,20 +177,50 @@ class OpenAIService {
         generateChatResponse(prompt: summaryPrompt) { result in
             switch result {
             case .success(let response):
+                // DEBUG: Log the raw response from OpenAI
+                print("📝 ========== RAW OPENAI SUMMARY RESPONSE ==========")
+                print(response)
+                print("📝 ================================================")
+
                 // Split the response into bullet points
-                let points = response.components(separatedBy: "\n")
+                let allLines = response.components(separatedBy: "\n")
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty && ($0.starts(with: "**") || $0.starts(with: "1.") || $0.starts(with: "2.") || $0.starts(with: "3.") || $0.starts(with: "4.")) }
+                    .filter { !$0.isEmpty }
+
+                print("📝 Total non-empty lines: \(allLines.count)")
+
+                // More flexible parsing: accept lines that start with **, numbers, or contain **
+                let points = allLines.filter { line in
+                    line.starts(with: "**") ||              // **Category**: text
+                    line.starts(with: "1.") ||               // 1. text
+                    line.starts(with: "2.") ||               // 2. text
+                    line.starts(with: "3.") ||               // 3. text
+                    line.starts(with: "4.") ||               // 4. text
+                    line.starts(with: "-") ||                // - text (bullet points)
+                    line.contains("**") ||                   // text with ** anywhere
+                    line.range(of: "^\\d+\\.", options: .regularExpression) != nil  // Any numbered item
+                }
+
+                print("📝 Parsed points count: \(points.count)")
+                points.enumerated().forEach { index, point in
+                    print("  [\(index + 1)] \(point)")
+                }
 
                 if points.isEmpty {
                     // ERROR RECOVERY: If parsing fails, return the whole response as a single point
                     print("⚠️ Failed to parse bullet points, returning full response")
                     completion(.success([response]))
+                } else if points.count < 4 {
+                    // PARTIAL RECOVERY: Got some points but not all 4, still return them
+                    print("⚠️ Expected 4 points but got \(points.count), returning what we have")
+                    completion(.success(points))
                 } else {
+                    print("✅ Successfully parsed \(points.count) summary points")
                     completion(.success(points))
                 }
 
             case .failure(let error):
+                print("❌ Failed to generate summary: \(error.localizedDescription)")
                 completion(.failure(error))
             }
         }

@@ -1,0 +1,50 @@
+Create a detailed diagram visualizing PosterLens' multi-API architecture with the following components and data flow:
+
+1. User Interface Layer:
+   - Camera capture component
+   - Summary view component
+   - Chat interface component
+   - Research context display
+
+2. Processing Pipeline:
+   - OCR Service (iOS Vision Framework)
+     - Convert image to text
+     - Apply scientific notation fixes
+     - Extract potential titles
+
+   - Perplexity API Integration (sonar-pro model)
+     - Generate summary bullet points
+     - Create author questions
+     - Suggest future research directions
+     - Identify related literature citations
+
+   - PubMed API Integration (E-Utilities)
+     - Validate and enrich citation data
+     - Provide reliable DOI links
+     - Ensure academic accuracy for references
+     - Serve as fallback when other citation links fail
+
+   - OpenAI API Integration
+     - Power conversational chat feature
+     - Process user questions about posters
+     - Maintain conversation context
+
+3. Data Flow:
+   - Show how poster image flows through OCR to extract text
+   - Illustrate how extracted text branches to different Perplexity API endpoints
+   - Demonstrate how literature citations flow through PubMed for validation and enhancement
+   - Visualize how chat history and poster content combine before OpenAI processing
+   - Show context preservation between interactions
+
+4. Key Features:
+   - Context caching system
+   - Citation enhancement
+   - PDF export pipeline
+
+Make the diagram visually appealing with:
+- Clear directional arrows showing data flow
+- Color coding for different API services
+- Distinctive shapes for user-facing vs. backend components
+- Brief annotations explaining key transformations at each stage
+
+The diagram should highlight the hybrid nature of the system that combines computer vision (OCR), Perplexity's semantic analysis capabilities, and OpenAI's conversational abilities to create a complete scientific poster analysis platform.

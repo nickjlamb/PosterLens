@@ -165,56 +165,89 @@ class PerplexityRelatedResearchService {
             print("📚 Found \(citationURLs.count) citation URLs from Search API")
         }
 
-        // SECOND: Parse the AI response to get paper details
+        // SECOND: Extract paper titles from AI response (for matching only)
+        var paperTitles: [String] = []
         if let choices = json["choices"] as? [[String: Any]],
            let firstChoice = choices.first,
            let message = firstChoice["message"] as? [String: Any],
            let content = message["content"] as? String {
 
-            print("📝 Parsing paper details from response...")
+            print("📝 ========== PERPLEXITY SEARCH RESPONSE ==========")
+            print(content)
+            print("📝 ===============================================")
 
-            // Try to parse structured paper information from the response
-            citations = parsePapersFromContent(content, citationURLs: citationURLs)
+            // Extract titles from numbered list
+            paperTitles = extractTitlesFromResponse(content)
+            print("📝 Extracted \(paperTitles.count) paper titles from response")
         }
 
-        // If we got citation URLs but couldn't parse paper details, create citations from URLs
-        if citations.isEmpty && !citationURLs.isEmpty {
-            print("⚠️ Creating citations directly from URLs...")
-            citations = createCitationsFromURLs(citationURLs)
-        }
+        // STRATEGY: Use the actual citation URLs (real web results), not AI-generated metadata
+        // This ensures we get REAL papers, not hallucinated citations
+        print("🔗 Processing \(citationURLs.count) citation URLs from Search API...")
+        citations = createCitationsFromURLs(citationURLs, suggestedTitles: paperTitles)
 
         return citations
     }
 
     // Create a focused search query from the poster scan
     private func createSearchQuery(from scan: PosterScan) -> String {
-        // Extract key terms from title
-        let titleKeywords = extractKeywords(from: scan.title).prefix(5).joined(separator: " ")
+        // Use the FULL summary for better context, not just keywords
+        let summaryContext = scan.summaryPoints.prefix(3).joined(separator: ". ")
 
-        // Get first summary point for context
-        let context = scan.summaryPoints.first ?? ""
-        let contextKeywords = extractKeywords(from: context).prefix(3).joined(separator: " ")
-
+        // STRATEGY: Let Perplexity Search find relevant URLs, don't ask it to format citations
+        // We'll get the real URLs from return_citations and validate with PubMed
         return """
-        Find 3-5 recent published research papers (2020-2024) related to: \(titleKeywords) \(contextKeywords)
+        Find 3-5 recent peer-reviewed research papers (2020-2024) related to this research:
 
-        CRITICAL FORMATTING RULES:
-        - NO preamble text like "Here are..." or "These papers..."
-        - NO concluding text like "If you need more..." or "Let me know..."
-        - Start IMMEDIATELY with: 1. Author A, Author B, et al.
-        - Use Vancouver citation style
-        - NO bold, NO italics, NO asterisks, NO other markdown
-        - NO "relevance" explanations
+        Title: \(scan.title)
 
-        Format EXACTLY like this:
-        1. Smith J, Johnson A, et al. Novel cancer immunotherapy approaches. Nature. 2023;615(7950):123-130. DOI: 10.1038/s41586-023-12345. PMID: 36890123.
-        2. Brown K, Davis M. Machine learning in drug discovery. Cell. 2024;187(3):456-470. DOI: 10.1016/j.cell.2024.01.023.
+        Summary: \(summaryContext)
 
-        Focus on high-impact journals. Include DOI and PMID when available.
+        Focus on:
+        - Papers published in high-impact journals (Nature, Science, Cell, NEJM, etc.)
+        - Recent publications (2020-2024)
+        - Papers indexed in PubMed when available
+        - Original research articles, not reviews
+
+        Return a simple numbered list with ONLY the paper titles, one per line. No authors, no journals, no metadata - just the titles.
+
+        Example format:
+        1. [Paper title here]
+        2. [Paper title here]
+        3. [Paper title here]
         """
     }
 
-    // Parse papers from the AI response content
+    // Extract titles from numbered list in AI response
+    private func extractTitlesFromResponse(_ content: String) -> [String] {
+        var titles: [String] = []
+
+        // Split by lines and extract numbered items
+        let lines = content.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        for line in lines {
+            // Match numbered list items: "1. Title", "2. Title", etc.
+            if let match = line.range(of: #"^\d+\.\s*(.+)$"#, options: .regularExpression) {
+                var title = String(line[match])
+                // Remove the number prefix
+                title = title.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
+                // Clean up markdown
+                title = title.replacingOccurrences(of: "**", with: "")
+                title = title.replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "")
+
+                if title.count > 10 {
+                    titles.append(title)
+                }
+            }
+        }
+
+        return titles
+    }
+
+    // DEPRECATED: Old parsing method - too fragile, relies on AI formatting
+    // Keeping for reference but not used anymore
     private func parsePapersFromContent(_ content: String, citationURLs: [String]) -> [Citation] {
         var citations: [Citation] = []
 
@@ -367,47 +400,126 @@ class PerplexityRelatedResearchService {
         return citations
     }
 
-    // Create citations directly from URLs (fallback method)
-    private func createCitationsFromURLs(_ urls: [String]) -> [Citation] {
+    // Create citations from actual URLs returned by Perplexity Search API
+    // This is the PRIMARY method - uses real URLs, not AI-generated metadata
+    private func createCitationsFromURLs(_ urls: [String], suggestedTitles: [String] = []) -> [Citation] {
+        print("🔗 Creating citations from \(urls.count) URLs with \(suggestedTitles.count) suggested titles")
+
         return urls.prefix(5).enumerated().map { index, urlString in
-            // Extract information from the URL if possible
-            var title = "Research Paper \(index + 1)"
+            // Use suggested title if available, otherwise placeholder
+            let title = index < suggestedTitles.count ? suggestedTitles[index] : "Research Paper \(index + 1)"
+
             var journal: String?
-            let year = Calendar.current.component(.year, from: Date())  // Changed to 'let' - never mutated
+            var pmid: String?
+            var doi: String?
+            var year: Int?
 
             if let url = URL(string: urlString), let host = url.host {
-                // Determine journal from domain
-                if host.contains("pubmed") || host.contains("ncbi") {
-                    journal = "PubMed"
+                print("  Processing URL: \(urlString)")
 
-                    // Try to extract PubMed ID for better title
-                    if let pmidMatch = urlString.range(of: #"\d{7,8}"#, options: .regularExpression) {
-                        let pmid = String(urlString[pmidMatch])
-                        title = "Research Paper (PMID: \(pmid))"
+                // PUBMED / PMC: Extract PMID/PMCID and let PubMed enrichment handle the rest
+                if host.contains("pubmed") || host.contains("pmc.ncbi.nlm.nih.gov") || host.contains("ncbi") {
+                    // Distinguish between PubMed and PubMed Central
+                    if urlString.contains("pmc.ncbi.nlm.nih.gov") {
+                        journal = "PubMed Central"
+                        // Extract PMCID (e.g., PMC12346686)
+                        if let pmcidMatch = urlString.range(of: #"PMC\d{7,8}"#, options: .regularExpression) {
+                            let pmcid = String(urlString[pmcidMatch])
+                            print("    ✅ Extracted PMCID: \(pmcid)")
+                        }
+                    } else {
+                        journal = "PubMed"
+                        // Extract PMID from URL
+                        if let pmidMatch = urlString.range(of: #"\d{7,8}"#, options: .regularExpression) {
+                            pmid = String(urlString[pmidMatch])
+                            print("    ✅ Extracted PMID: \(pmid!)")
+                        }
                     }
-                } else if host.contains("arxiv") {
-                    journal = "arXiv"
-                    title = "Preprint Paper (arXiv)"
-                } else if host.contains("nature") {
-                    journal = "Nature"
-                } else if host.contains("science") {
-                    journal = "Science"
-                } else if host.contains("cell") {
-                    journal = "Cell"
-                } else {
-                    journal = "Academic Journal"
                 }
+                // NATURE: Extract DOI from Nature URLs
+                else if host.contains("nature.com") {
+                    journal = "Nature Publishing Group"
+
+                    // Nature URLs often contain DOI: nature.com/articles/s41586-023-12345
+                    if let doiMatch = urlString.range(of: #"10\.\d{4,}/[^\s/]+"#, options: .regularExpression) {
+                        doi = String(urlString[doiMatch])
+                        print("    ✅ Extracted DOI: \(doi!)")
+                    }
+
+                    // Extract year from URL if present
+                    if let yearMatch = urlString.range(of: #"(20[12][0-9])"#, options: .regularExpression) {
+                        year = Int(String(urlString[yearMatch]))
+                    }
+                }
+                // SCIENCE: Extract DOI from Science URLs
+                else if host.contains("science.org") {
+                    journal = "Science"
+
+                    if let doiMatch = urlString.range(of: #"10\.\d{4,}/[^\s/]+"#, options: .regularExpression) {
+                        doi = String(urlString[doiMatch])
+                        print("    ✅ Extracted DOI: \(doi!)")
+                    }
+
+                    if let yearMatch = urlString.range(of: #"(20[12][0-9])"#, options: .regularExpression) {
+                        year = Int(String(urlString[yearMatch]))
+                    }
+                }
+                // CELL PRESS
+                else if host.contains("cell.com") {
+                    journal = "Cell Press"
+
+                    if let doiMatch = urlString.range(of: #"10\.\d{4,}/[^\s/]+"#, options: .regularExpression) {
+                        doi = String(urlString[doiMatch])
+                        print("    ✅ Extracted DOI: \(doi!)")
+                    }
+                }
+                // ARXIV: Extract arXiv ID
+                else if host.contains("arxiv.org") {
+                    journal = "arXiv Preprint"
+
+                    // arXiv URLs: arxiv.org/abs/2301.12345
+                    if let arxivMatch = urlString.range(of: #"\d{4}\.\d{4,5}"#, options: .regularExpression) {
+                        let arxivId = String(urlString[arxivMatch])
+                        print("    ✅ Extracted arXiv ID: \(arxivId)")
+                        // Extract year from arXiv ID
+                        if let yearStr = arxivId.split(separator: ".").first,
+                           let yearValue = Int(yearStr) {
+                            year = 2000 + yearValue
+                        } else {
+                            year = Calendar.current.component(.year, from: Date())
+                        }
+                    }
+                }
+                // SCIENCEDIRECT (Elsevier)
+                else if host.contains("sciencedirect.com") {
+                    journal = "ScienceDirect"
+
+                    if let doiMatch = urlString.range(of: #"10\.\d{4,}/[^\s/]+"#, options: .regularExpression) {
+                        doi = String(urlString[doiMatch])
+                        print("    ✅ Extracted DOI: \(doi!)")
+                    }
+                }
+                // OTHER ACADEMIC DOMAINS
+                else {
+                    journal = host
+                        .replacingOccurrences(of: "www.", with: "")
+                        .replacingOccurrences(of: ".com", with: "")
+                        .replacingOccurrences(of: ".org", with: "")
+                        .capitalized
+                }
+
+                print("    Journal: \(journal ?? "Unknown")")
             }
 
             return Citation(
                 title: title,
-                authors: ["Research Team"],
+                authors: ["Research Team"],  // Will be updated by PubMed enrichment if available
                 journal: journal,
                 year: year,
-                doi: nil,
+                doi: doi,
                 url: urlString,
                 abstract: nil,
-                relevance: nil  // No relevance text - keep it clean
+                relevance: nil
             )
         }
     }

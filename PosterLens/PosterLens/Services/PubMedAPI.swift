@@ -66,34 +66,76 @@ class PubMedAPI {
     /// - Parameter citation: The citation to enrich
     /// - Returns: An enriched citation if successful, nil otherwise
     private static func enrichCitation(_ citation: Citation) async -> Citation? {
-        // Strategy 1: Try to use the PMID or DOI directly
+        print("📚 Enriching citation: \(citation.title)")
+
+        // Strategy 1A: Try PubMed URL (direct PMID)
         if citation.url?.contains("pubmed.ncbi.nlm.nih.gov") == true,
            let pmid = extractPMID(from: citation.url ?? "") {
-            // We have a PubMed URL, extract the ID and validate
+            print("  ✅ Found PMID: \(pmid) - fetching metadata...")
             if let enriched = await fetchMetadata(for: pmid) {
+                print("  ✅ Enriched with PubMed data:")
+                print("     Authors: \(enriched.authors.prefix(2).joined(separator: ", "))")
+                print("     Journal: \(enriched.journal ?? "N/A")")
+                print("     Year: \(enriched.year.map(String.init) ?? "N/A")")
                 return createEnrichedCitation(original: citation, pubmed: enriched)
-            }
-        } else if let doi = citation.doi, !doi.isEmpty {
-            // We have a DOI, try to find the corresponding PubMed record
-            if let enriched = await fetchMetadataByDOI(doi) {
-                return createEnrichedCitation(original: citation, pubmed: enriched)
+            } else {
+                print("  ⚠️ Failed to fetch metadata for PMID: \(pmid)")
             }
         }
-        
+
+        // Strategy 1B: Try PubMed Central URL (convert PMCID to PMID)
+        else if citation.url?.contains("pmc.ncbi.nlm.nih.gov") == true,
+                let pmcid = extractPMCID(from: citation.url ?? "") {
+            print("  ✅ Found PMCID: \(pmcid) - converting to PMID...")
+            if let pmid = await convertPMCIDToPMID(pmcid) {
+                print("  ✅ Fetching metadata for PMID: \(pmid)...")
+                if let enriched = await fetchMetadata(for: pmid) {
+                    print("  ✅ Enriched with PubMed data:")
+                    print("     Authors: \(enriched.authors.prefix(2).joined(separator: ", "))")
+                    print("     Journal: \(enriched.journal ?? "N/A")")
+                    print("     Year: \(enriched.year.map(String.init) ?? "N/A")")
+                    return createEnrichedCitation(original: citation, pubmed: enriched)
+                } else {
+                    print("  ⚠️ Failed to fetch metadata for PMID: \(pmid)")
+                }
+            } else {
+                print("  ⚠️ Failed to convert PMCID to PMID")
+            }
+        }
+
+        // Strategy 2: Try DOI
+        else if let doi = citation.doi, !doi.isEmpty {
+            print("  ✅ Found DOI: \(doi) - searching PubMed...")
+            if let enriched = await fetchMetadataByDOI(doi) {
+                print("  ✅ Enriched with PubMed data via DOI")
+                return createEnrichedCitation(original: citation, pubmed: enriched)
+            } else {
+                print("  ⚠️ No PubMed record found for DOI: \(doi)")
+            }
+        }
+
         // Strategy 2: Search by title and first author
+        print("  🔍 Searching PubMed by title...")
         let searchQuery = buildSearchQuery(for: citation)
         if let pmids = await searchForPMIDs(query: searchQuery), !pmids.isEmpty {
             // Take the first (most relevant) result
             if let firstPMID = pmids.first, let enriched = await fetchMetadata(for: firstPMID) {
                 // Verify the match by comparing titles
                 let similarity = calculateTitleSimilarity(citation.title, enriched.title)
+                print("  📊 Title similarity: \(Int(similarity * 100))%")
                 if similarity > 0.7 { // 70% similarity threshold
+                    print("  ✅ Match confirmed - enriching with PubMed data")
                     return createEnrichedCitation(original: citation, pubmed: enriched)
+                } else {
+                    print("  ⚠️ Title similarity too low (\(Int(similarity * 100))%) - keeping original")
                 }
             }
+        } else {
+            print("  ⚠️ No PubMed results found for title search")
         }
-        
+
         // If all strategies fail, return the original citation
+        print("  ⚠️ Returning original citation (no enrichment)")
         return citation
     }
     
@@ -109,7 +151,7 @@ class PubMedAPI {
             authors: pubmed.authors.isEmpty ? original.authors : pubmed.authors, // Prefer PubMed authors
             journal: pubmed.journal ?? original.journal,
             year: pubmed.year ?? original.year,
-            doi: pubmed.doi ?? original.doi,
+            doi: nil, // Don't include DOI - we want PubMed links, not DOI.org links
             url: buildPubMedURL(pmid: extractPMID(from: pubmed.url ?? "") ?? ""), // Use proper PubMed URL
             abstract: pubmed.abstract ?? original.abstract,
             relevance: original.relevance // Keep original relevance explanation
@@ -419,6 +461,99 @@ class PubMedAPI {
         } catch {
             print("Error extracting PMID: \(error.localizedDescription)")
         }
+        return nil
+    }
+
+    /// Extract a PMCID from a PubMed Central URL
+    /// - Parameter url: The PMC URL
+    /// - Returns: The PMCID if available, nil otherwise
+    private static func extractPMCID(from url: String) -> String? {
+        // Match patterns like https://pmc.ncbi.nlm.nih.gov/articles/PMC12345678/
+        let pattern = "PMC(\\d+)"
+        do {
+            let regex = try NSRegularExpression(pattern: pattern)
+            let range = NSRange(url.startIndex..., in: url)
+            if let match = regex.firstMatch(in: url, range: range),
+               let matchRange = Range(match.range(at: 1), in: url) {
+                return "PMC" + String(url[matchRange])
+            }
+        } catch {
+            print("Error extracting PMCID: \(error.localizedDescription)")
+        }
+        return nil
+    }
+
+    /// Convert PMCID to PMID using PubMed ID Converter API
+    /// - Parameter pmcid: The PMCID (e.g., "PMC12345678")
+    /// - Returns: The corresponding PMID if available, nil otherwise
+    private static func convertPMCIDToPMID(_ pmcid: String) async -> String? {
+        // Use PubMed ID Converter API
+        var components = URLComponents(string: "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/")
+        components?.queryItems = [
+            URLQueryItem(name: "ids", value: pmcid),
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "tool", value: tool),
+            URLQueryItem(name: "email", value: email)
+        ]
+
+        guard let url = components?.url else {
+            print("  ❌ Invalid URL for PMCID conversion")
+            return nil
+        }
+
+        print("  🔗 ID Converter URL: \(url.absoluteString)")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+
+            // Check HTTP response
+            if let httpResponse = response as? HTTPURLResponse {
+                print("  📡 ID Converter HTTP Status: \(httpResponse.statusCode)")
+            }
+
+            // Debug: Print raw response
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("  📄 ID Converter Response: \(responseString)")
+            }
+
+            // Parse JSON response
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("  📋 Parsed JSON: \(json)")
+
+                if let records = json["records"] as? [[String: Any]] {
+                    print("  📚 Found \(records.count) records")
+
+                    if let firstRecord = records.first {
+                        print("  📖 First record: \(firstRecord)")
+
+                        // PMID can be either String or Int in the response
+                        var pmidString: String? = nil
+
+                        if let pmidStr = firstRecord["pmid"] as? String {
+                            pmidString = pmidStr
+                        } else if let pmidInt = firstRecord["pmid"] as? Int {
+                            pmidString = String(pmidInt)
+                        }
+
+                        if let pmid = pmidString {
+                            print("  ✅ Converted \(pmcid) → PMID: \(pmid)")
+                            return pmid
+                        } else {
+                            print("  ⚠️ No 'pmid' field in record (tried both String and Int)")
+                        }
+                    } else {
+                        print("  ⚠️ Records array is empty")
+                    }
+                } else {
+                    print("  ⚠️ No 'records' field in JSON")
+                }
+            } else {
+                print("  ❌ Failed to parse JSON response")
+            }
+        } catch {
+            print("  ❌ Error converting PMCID to PMID: \(error.localizedDescription)")
+        }
+
         return nil
     }
 }
