@@ -151,7 +151,7 @@ class OpenAIService {
     /// - Parameters:
     ///   - text: The raw text extracted from a scientific poster
     ///   - completion: Completion handler with Result containing structured bullet points or error
-    /// - Note: Returns 4 bullet points covering research question, methodology, results, and conclusions
+    /// - Note: Returns 6 bullet points covering research question, patient population, primary endpoint, methodology, results, and conclusions
     func generateStructuredSummary(from text: String, completion: @escaping (Result<[String], Error>) -> Void) {
         // Validate API key
         if !hasValidAPIKey {
@@ -162,13 +162,17 @@ class OpenAIService {
         let summaryPrompt = """
         You are a scientific summarization assistant. Analyze the following text extracted from a scientific poster and create a structured summary.
 
-        Please provide EXACTLY 4 bullet points covering:
+        Please provide EXACTLY 6 bullet points covering:
         1. Main Research Question/Objective
-        2. Methodology Used
-        3. Key Results and Findings
-        4. Main Conclusions and Implications
+        2. Patient Population (if applicable - include sample size, key inclusion/exclusion criteria, demographics)
+        3. Primary Endpoint (if applicable - the main outcome measure)
+        4. Methodology Used
+        5. Key Results and Findings
+        6. Main Conclusions and Implications
 
         Format each point starting with "**[Category]**: " followed by the content.
+
+        If the poster is not a clinical study and patient population or primary endpoint are not applicable, briefly state "Not applicable" or provide the most relevant information for that category (e.g., for basic science: sample characteristics, primary measure).
 
         Text to summarize:
         \(text)
@@ -196,6 +200,8 @@ class OpenAIService {
                     line.starts(with: "2.") ||               // 2. text
                     line.starts(with: "3.") ||               // 3. text
                     line.starts(with: "4.") ||               // 4. text
+                    line.starts(with: "5.") ||               // 5. text
+                    line.starts(with: "6.") ||               // 6. text
                     line.starts(with: "-") ||                // - text (bullet points)
                     line.contains("**") ||                   // text with ** anywhere
                     line.range(of: "^\\d+\\.", options: .regularExpression) != nil  // Any numbered item
@@ -210,9 +216,9 @@ class OpenAIService {
                     // ERROR RECOVERY: If parsing fails, return the whole response as a single point
                     print("⚠️ Failed to parse bullet points, returning full response")
                     completion(.success([response]))
-                } else if points.count < 4 {
-                    // PARTIAL RECOVERY: Got some points but not all 4, still return them
-                    print("⚠️ Expected 4 points but got \(points.count), returning what we have")
+                } else if points.count < 6 {
+                    // PARTIAL RECOVERY: Got some points but not all 6, still return them
+                    print("⚠️ Expected 6 points but got \(points.count), returning what we have")
                     completion(.success(points))
                 } else {
                     print("✅ Successfully parsed \(points.count) summary points")

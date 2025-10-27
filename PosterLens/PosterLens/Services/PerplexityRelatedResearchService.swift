@@ -19,22 +19,10 @@ class PerplexityRelatedResearchService {
     // Note: We now use the SEARCH endpoint, not chat/completions
     private let searchBaseURL = "https://api.perplexity.ai/chat/completions"
 
-    // Academic domains to prioritize in search
-    private let academicDomains = [
+    // PubMed-only domains to ensure peer-reviewed articles
+    private let pubmedDomains = [
         "pubmed.ncbi.nlm.nih.gov",
-        "pmc.ncbi.nlm.nih.gov",
-        "nih.gov",
-        "arxiv.org",
-        "scholar.google.com",
-        "nature.com",
-        "science.org",
-        "sciencedirect.com",
-        "springer.com",
-        "wiley.com",
-        "cell.com",
-        "nejm.org",
-        "pnas.org",
-        "ieee.org"
+        "pmc.ncbi.nlm.nih.gov"
     ]
 
     /// Find related research papers for a poster scan
@@ -44,37 +32,51 @@ class PerplexityRelatedResearchService {
     /// - Returns: Array of up to 5 citations from trusted academic sources
     /// - Note: Uses Perplexity Search API with domain filters. PubMed enrichment adds 30-60s.
     func findRelatedResearch(from scan: PosterScan, skipEnrichment: Bool = false) async throws -> [Citation] {
-        // Validate API key
-        if !perplexityService.hasValidAPIKey {
-            throw NetworkError.missingAPIKey(service: "Perplexity")
-        }
+        print("🔍 Starting Related Research search using Perplexity Search API...")
+        print("📚 Searching academic databases with Perplexity")
 
-        print("🔍 Starting Related Research search using Perplexity Search API with domain filters...")
-        print("📚 Searching trusted domains: PubMed, Nature, Science, Cell, arXiv, and more")
-
-        // Use Perplexity Search API with domain filtering
+        // Try Perplexity Search API first
         let citations = try await searchWithPerplexitySearchAPI(scan: scan)
 
-        print("✅ Found \(citations.count) papers from Search API")
+        print("✅ Found \(citations.count) papers")
 
-        // OPTIMIZATION: Skip PubMed enrichment for faster results
-        // Domain filtering already ensures high-quality sources
-        if skipEnrichment {
-            print("⚡️ Skipping PubMed enrichment for faster results")
-            let finalCitations = citations.prefix(5)
-            return Array(finalCitations)
+        // Check if citations already have PubMed data (from direct search)
+        let hasRealPubMedData = citations.first?.url?.contains("pubmed.ncbi.nlm.nih.gov") == true
+            && !(citations.first?.url?.contains("?term=") ?? false)  // Not a search link
+
+        if hasRealPubMedData {
+            // Papers are already from PubMed - no enrichment needed
+            print("✅ Papers already have PubMed metadata - skipping enrichment")
+            return Array(citations.prefix(5))
         }
 
-        // Enrich with PubMed for additional validation and metadata (slower)
+        // OPTIMIZATION: Skip PubMed enrichment for faster results if requested
+        if skipEnrichment {
+            print("⚡️ Skipping PubMed enrichment for faster results")
+            return Array(citations.prefix(5))
+        }
+
+        // Enrich with PubMed for additional validation and metadata
         print("🔍 Enriching with PubMed (this may take 30-60 seconds)...")
         let enrichedCitations = await PubMedAPI.enrichCitations(citations)
 
         print("✅ Enriched \(enrichedCitations.count) papers with PubMed data")
 
-        // Final validation and limiting to 5 papers
-        let finalCitations = enrichedCitations.prefix(5)
+        // Deduplicate by title (case-insensitive) after enrichment
+        var seenTitles = Set<String>()
+        let uniqueCitations = enrichedCitations.filter { citation in
+            let normalizedTitle = citation.title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            if seenTitles.contains(normalizedTitle) {
+                print("  🗑️ Removing duplicate: \(citation.title)")
+                return false
+            }
+            seenTitles.insert(normalizedTitle)
+            return true
+        }
 
-        return Array(finalCitations)
+        print("✅ After deduplication: \(uniqueCitations.count) unique papers")
+
+        return Array(uniqueCitations.prefix(5))
     }
 
     // Compatibility wrapper for completion handler style
@@ -110,15 +112,11 @@ class PerplexityRelatedResearchService {
         // Create a focused search query
         let searchQuery = createSearchQuery(from: scan)
 
-        // CRITICAL: Use return_citations=true and search_domain_filter to get real web results
-        // Domain filters ensure we only get results from trusted academic sources
+        // Use sonar-pro model for Search API
+        // IMPORTANT: No system message - sonar models work best with just user queries
         let requestBody: [String: Any] = [
-            "model": "sonar",  // Use sonar (search model), not sonar-pro (chat model)
+            "model": "sonar-pro",
             "messages": [
-                [
-                    "role": "system",
-                    "content": "You are a research citation assistant. Return ONLY a numbered list of papers in Vancouver citation style. NO preamble, NO explanations, NO markdown formatting. Start immediately with paper 1."
-                ],
                 [
                     "role": "user",
                     "content": searchQuery
@@ -126,12 +124,13 @@ class PerplexityRelatedResearchService {
             ],
             "max_tokens": 2000,
             "temperature": 0.2,  // Low temperature for factual results
-            "return_citations": true,  // CRITICAL: Get actual URLs from search results
+            "return_citations": true,  // Request citations
             "return_images": false,
             "return_related_questions": false,
-            "search_domain_filter": academicDomains,  // ✅ NEW: Domain filters for trusted sources only
-            "search_recency_filter": "year"  // Prefer recent papers (last year)
+            "search_domain_filter": pubmedDomains  // Only PubMed - peer-reviewed articles only
         ]
+
+        print("🔍 Using sonar-pro Search API with PubMed-only domain filter...")
 
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -147,26 +146,66 @@ class PerplexityRelatedResearchService {
 
         // Safe JSON parsing with error checking
         guard let json = SafeJSONParser.parseToDictionary(data) else {
+            print("❌ Failed to parse JSON response")
             throw NetworkError.malformedData
         }
 
+        // DEBUG: Print full API response structure (without sensitive data)
+        print("📊 ========== PERPLEXITY API RESPONSE STRUCTURE ==========")
+        print("Keys in response: \(json.keys)")
+        if let choices = json["choices"] as? [[String: Any]] {
+            print("Number of choices: \(choices.count)")
+        }
+        if let citations = json["citations"] as? [String] {
+            print("Number of citations: \(citations.count)")
+        }
+        if let searchResults = json["search_results"] as? [[String: Any]] {
+            print("Number of search_results: \(searchResults.count)")
+        }
+        print("📊 =====================================================")
+
         // Check for API errors using SafeJSONParser
         if let errorMessage = SafeJSONParser.extractErrorMessage(data) {
+            print("❌ API error detected: \(errorMessage)")
             throw NetworkError.apiError(service: "Perplexity", message: errorMessage)
         }
 
         // Extract citations from the response
         var citations: [Citation] = []
 
-        // FIRST: Get actual URLs from the citations array (these are real web results!)
+        // FIRST: Try to get URLs from citations array
         var citationURLs: [String] = []
         if let citationsArray = json["citations"] as? [String] {
-            citationURLs = citationsArray
-            print("📚 Found \(citationURLs.count) citation URLs from Search API")
+            // Deduplicate URLs - keep only unique ones
+            let uniqueURLs = Array(Set(citationsArray))
+            citationURLs = uniqueURLs
+            print("📚 Found \(citationsArray.count) citation URLs (\(uniqueURLs.count) unique) from 'citations' array")
+            citationURLs.prefix(3).forEach { url in
+                print("  - \(url)")
+            }
         }
 
-        // SECOND: Extract paper titles from AI response (for matching only)
+        // FALLBACK: If citations array is empty, try search_results
+        if citationURLs.isEmpty, let searchResults = json["search_results"] as? [[String: Any]] {
+            print("⚠️ No citations in 'citations' array, trying 'search_results' instead")
+            for result in searchResults {
+                if let url = result["url"] as? String {
+                    citationURLs.append(url)
+                    print("  ✅ Found URL in search_results: \(url)")
+                }
+            }
+            print("📚 Extracted \(citationURLs.count) URLs from 'search_results' array")
+        }
+
+        // If still empty, log the issue
+        if citationURLs.isEmpty {
+            print("⚠️ No citation URLs found in either 'citations' or 'search_results'")
+        }
+
+        // SECOND: Extract paper titles AND URLs from AI response
         var paperTitles: [String] = []
+        var extractedURLs: [String] = []
+
         if let choices = json["choices"] as? [[String: Any]],
            let firstChoice = choices.first,
            let message = firstChoice["message"] as? [String: Any],
@@ -176,74 +215,109 @@ class PerplexityRelatedResearchService {
             print(content)
             print("📝 ===============================================")
 
-            // Extract titles from numbered list
-            paperTitles = extractTitlesFromResponse(content)
+            // Extract titles and URLs from the response
+            let (titles, urls) = extractTitlesAndURLsFromResponse(content)
+            paperTitles = titles
+            extractedURLs = urls
             print("📝 Extracted \(paperTitles.count) paper titles from response")
+            print("📝 Extracted \(extractedURLs.count) URLs from response text")
         }
 
-        // STRATEGY: Use the actual citation URLs (real web results), not AI-generated metadata
-        // This ensures we get REAL papers, not hallucinated citations
-        print("🔗 Processing \(citationURLs.count) citation URLs from Search API...")
-        citations = createCitationsFromURLs(citationURLs, suggestedTitles: paperTitles)
+        // STRATEGY: Use URLs from multiple sources in priority order
+        print("🔗 Processing citations from Perplexity Search API...")
 
+        // Combine URLs from all sources (citations array, search_results, and extracted from text)
+        var allURLs = citationURLs
+        if allURLs.isEmpty {
+            allURLs = extractedURLs
+            print("📝 Using URLs extracted from response text: \(allURLs.count)")
+        }
+
+        if !allURLs.isEmpty {
+            // SUCCESS: We have URLs from Perplexity
+            print("✅ Creating citations from \(allURLs.count) Perplexity URLs")
+            citations = createCitationsFromURLs(allURLs, suggestedTitles: paperTitles)
+        } else {
+            // FALLBACK: No URLs from Perplexity - search PubMed directly with keywords
+            print("⚠️ No URLs from Perplexity - searching PubMed directly with keywords from poster")
+            citations = try await searchPubMedDirectly(scan: scan)
+        }
+
+        print("✅ Found \(citations.count) papers")
         return citations
     }
 
     // Create a focused search query from the poster scan
     private func createSearchQuery(from scan: PosterScan) -> String {
-        // Use the FULL summary for better context, not just keywords
-        let summaryContext = scan.summaryPoints.prefix(3).joined(separator: ". ")
+        // Extract key terms for a focused search
+        let summaryContext = scan.summaryPoints.prefix(3).joined(separator: " ")
 
-        // STRATEGY: Let Perplexity Search find relevant URLs, don't ask it to format citations
-        // We'll get the real URLs from return_citations and validate with PubMed
+        // STRATEGY: Create a focused question that will trigger search
+        // Extract key medical terms from the title and summary
+        let keywords = extractKeywords(from: "\(scan.title) \(summaryContext)")
+        let topKeywords = keywords.prefix(5).joined(separator: " ")
+
         return """
-        Find 3-5 recent peer-reviewed research papers (2020-2024) related to this research:
-
-        Title: \(scan.title)
-
-        Summary: \(summaryContext)
-
-        Focus on:
-        - Papers published in high-impact journals (Nature, Science, Cell, NEJM, etc.)
-        - Recent publications (2020-2024)
-        - Papers indexed in PubMed when available
-        - Original research articles, not reviews
-
-        Return a simple numbered list with ONLY the paper titles, one per line. No authors, no journals, no metadata - just the titles.
-
-        Example format:
-        1. [Paper title here]
-        2. [Paper title here]
-        3. [Paper title here]
+        Recent clinical trials and research papers about \(topKeywords) published in peer-reviewed journals
         """
     }
 
-    // Extract titles from numbered list in AI response
-    private func extractTitlesFromResponse(_ content: String) -> [String] {
+    // Extract both titles and URLs from AI response text
+    // Handles multiple formats including markdown italic titles
+    private func extractTitlesAndURLsFromResponse(_ content: String) -> (titles: [String], urls: [String]) {
         var titles: [String] = []
+        var urls: [String] = []
 
-        // Split by lines and extract numbered items
+        // Split by lines and extract content
         let lines = content.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
         for line in lines {
-            // Match numbered list items: "1. Title", "2. Title", etc.
-            if let match = line.range(of: #"^\d+\.\s*(.+)$"#, options: .regularExpression) {
-                var title = String(line[match])
-                // Remove the number prefix
-                title = title.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
-                // Clean up markdown
-                title = title.replacingOccurrences(of: "**", with: "")
-                title = title.replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "")
+            // Pattern 1: Numbered items "1. Title" or "**a.** *Title*"
+            if line.range(of: #"^\d+\.\s*\*{0,2}"#, options: .regularExpression) != nil ||
+               line.range(of: #"^\*{0,2}[a-z]\.\*{0,2}\s*\*"#, options: .regularExpression) != nil {
 
-                if title.count > 10 {
+                let cleanLine = line
+                    .replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
+                    .replacingOccurrences(of: #"^\*{0,2}[a-z]\.\*{0,2}\s*"#, with: "", options: .regularExpression)
+
+                // Try to extract URL from the line
+                var extractedURL: String?
+                var title: String = cleanLine
+
+                // Look for URL in line
+                if let urlRange = cleanLine.range(of: #"https?://[^\s)]+"#, options: .regularExpression) {
+                    extractedURL = String(cleanLine[urlRange])
+                    title = String(cleanLine[..<urlRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+
+                // Clean up title - remove markdown formatting
+                title = title.replacingOccurrences(of: "*", with: "")
+                title = title.replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "")
+                title = title.replacingOccurrences(of: "**", with: "")
+                title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Check if this looks like a paper title (has italic markers or is long enough)
+                if title.count > 20 && !title.contains("##") && !title.contains("Journal:") {
                     titles.append(title)
+                    if let url = extractedURL {
+                        urls.append(url)
+                        print("  📎 Found URL in text: \(url)")
+                    }
                 }
             }
         }
 
-        return titles
+        print("  📝 Extracted \(titles.count) titles from response")
+        titles.prefix(3).forEach { print("    - \($0)") }
+
+        return (titles, urls)
+    }
+
+    // DEPRECATED: Old method that only extracted titles
+    private func extractTitlesFromResponse(_ content: String) -> [String] {
+        return extractTitlesAndURLsFromResponse(content).titles
     }
 
     // DEPRECATED: Old parsing method - too fragile, relies on AI formatting
@@ -524,7 +598,67 @@ class PerplexityRelatedResearchService {
         }
     }
 
-    // Extract important keywords from text
+    // Search PubMed directly using keywords from the poster summary
+    // This finds REAL papers instead of relying on AI-generated titles
+    private func searchPubMedDirectly(scan: PosterScan) async throws -> [Citation] {
+        print("🔍 Extracting keywords from poster summary...")
+
+        // Extract key terms from the summary
+        let summaryText = scan.summaryPoints.prefix(3).joined(separator: " ")
+        let keywords = extractKeywords(from: summaryText)
+
+        // Create a focused PubMed search query
+        let searchTerms = keywords.prefix(5).joined(separator: " AND ")
+        print("🔍 PubMed search terms: \(searchTerms)")
+
+        // Use PubMedAPI.search() which returns full Citation objects
+        let papers = await PubMedAPI.search(query: searchTerms)
+        print("📚 Found \(papers.count) papers from PubMed")
+
+        if papers.isEmpty {
+            print("⚠️ No papers found in PubMed - trying broader search")
+            // Try a broader search with just the top 3 keywords
+            let broaderTerms = keywords.prefix(3).joined(separator: " ")
+            let broaderPapers = await PubMedAPI.search(query: broaderTerms)
+            print("📚 Broader search found \(broaderPapers.count) papers")
+
+            if broaderPapers.isEmpty {
+                throw NetworkError.emptyResponse
+            }
+
+            return Array(broaderPapers.prefix(5))
+        }
+
+        return Array(papers.prefix(5))
+    }
+
+    // Create citations from paper titles only (fallback when no URLs available)
+    // DEPRECATED: This method creates fake citations - use searchPubMedDirectly instead
+    private func createCitationsFromTitles(_ titles: [String]) -> [Citation] {
+        print("🔗 Creating citations from \(titles.count) paper titles (no URLs from Perplexity)")
+
+        return titles.prefix(5).enumerated().map { index, title in
+            // Create a PubMed search URL using the title
+            let encodedTitle = title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let pubmedSearchURL = "https://pubmed.ncbi.nlm.nih.gov/?term=\(encodedTitle)"
+
+            print("  [\(index + 1)] \(title)")
+            print("      → PubMed search: \(pubmedSearchURL)")
+
+            return Citation(
+                title: title,
+                authors: ["Research Team"],  // Will be updated by PubMed enrichment
+                journal: nil,
+                year: nil,
+                doi: nil,
+                url: pubmedSearchURL,  // PubMed search link
+                abstract: nil,
+                relevance: nil
+            )
+        }
+    }
+
+    // Extract important medical/scientific keywords from text
     private func extractKeywords(from text: String) -> [String] {
         let words = text.components(separatedBy: .whitespacesAndNewlines)
             .map { $0.trimmingCharacters(in: .punctuationCharacters).lowercased() }
@@ -535,12 +669,30 @@ class PerplexityRelatedResearchService {
             wordFrequency[word, default: 0] += 1
         }
 
-        // Filter out common stop words
-        let stopWords = ["these", "those", "their", "there", "where", "which", "while", "would", "could", "should", "using", "based", "study", "research", "analysis"]
+        // Expanded stop words list including common medical research terms that are too generic
+        let stopWords = [
+            "these", "those", "their", "there", "where", "which", "while", "would", "could", "should",
+            "using", "based", "study", "research", "analysis", "patients", "phase", "trial", "clinical",
+            "combination", "treatment", "therapy", "showed", "demonstrated", "observed", "reported",
+            "results", "conclusion", "objective", "methodology", "findings", "implications", "background",
+            "methods", "endpoint", "primary", "secondary", "efficacy", "safety"
+        ]
+
         for stopWord in stopWords {
             wordFrequency.removeValue(forKey: stopWord)
         }
 
-        return wordFrequency.sorted { $0.value > $1.value }.prefix(10).map { $0.key }
+        // Prioritize compound medical terms (drug names, conditions, etc.)
+        // Words with capital letters or hyphens are likely important medical terms
+        let keywords = wordFrequency.sorted { $0.value > $1.value }.map { $0.key }
+
+        // Get top keywords, preferring longer, more specific terms
+        return keywords.sorted { word1, word2 in
+            // Prefer words that appear in title or are longer
+            if wordFrequency[word1]! != wordFrequency[word2]! {
+                return wordFrequency[word1]! > wordFrequency[word2]!
+            }
+            return word1.count > word2.count
+        }.prefix(8).map { $0 }
     }
 }

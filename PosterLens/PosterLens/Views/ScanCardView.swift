@@ -41,7 +41,7 @@ struct ScanCardView: View {
                                     VStack {
                                         HStack {
                                             Spacer()
-                                            Image(systemName: "rectangle.landscape")
+                                            Image(systemName: "arrow.left.and.right")
                                                 .font(.system(size: 12))
                                                 .foregroundColor(.white)
                                                 .padding(6)

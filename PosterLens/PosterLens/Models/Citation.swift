@@ -75,12 +75,38 @@ struct Citation: Codable, Identifiable, Equatable {
     }
     
     /// Returns a URL that can be used to access the paper
+    /// Priority: PubMed URL > regular URL > DOI link
     var accessURL: URL? {
-        if let doi = doi {
-            return URL(string: "https://doi.org/\(doi)")
-        } else if let url = url {
+        // PRIORITY 1: Prefer PubMed URLs (most reliable)
+        if let url = url, url.contains("pubmed.ncbi.nlm.nih.gov") {
             return URL(string: url)
         }
+
+        // PRIORITY 2: Use regular URL if available
+        if let url = url, !url.contains("?term=") {  // Exclude PubMed search links
+            return URL(string: url)
+        }
+
+        // PRIORITY 3: Use DOI as fallback (clean it up first)
+        if let doi = doi {
+            // Clean up DOI - remove spaces and extra slashes
+            let cleanDOI = doi.trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: " ", with: "")
+                .replacingOccurrences(of: "%20", with: "")
+
+            // Ensure DOI doesn't already have http/https prefix
+            if cleanDOI.starts(with: "http") {
+                return URL(string: cleanDOI)
+            } else {
+                return URL(string: "https://doi.org/\(cleanDOI)")
+            }
+        }
+
+        // FALLBACK: Return original URL even if it's a search link
+        if let url = url {
+            return URL(string: url)
+        }
+
         return nil
     }
     

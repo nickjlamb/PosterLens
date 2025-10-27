@@ -71,7 +71,7 @@ struct SummaryView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
                     .padding(.top, 8)
-                
+
                 // Process summary points to extract headings and content
                 ForEach(processedSummaryPoints(), id: \.title) { point in
                     SummaryCardView(title: point.title, content: point.content)
@@ -156,13 +156,17 @@ struct SummaryView: View {
                 scanSaved = true
             }
         }
-        .navigationDestination(isPresented: $showHistory) {
-            ImprovedHistoryView()
-                .environmentObject(dataStore)
+        .sheet(isPresented: $showHistory) {
+            NavigationView {
+                ImprovedHistoryView()
+                    .environmentObject(dataStore)
+            }
         }
-        .navigationDestination(isPresented: $showChat) {
-            SimpleChatView(posterScan: scan)
-                .environmentObject(dataStore)
+        .sheet(isPresented: $showChat) {
+            NavigationView {
+                SimpleChatView(posterScan: scan)
+                    .environmentObject(dataStore)
+            }
         }
     }
     
@@ -242,6 +246,8 @@ struct SummaryView_Previews: PreviewProvider {
                 rawText: "This is the raw text of the poster.",
                 summaryPoints: [
                     "**Main Research Question/Objective**: The poster focuses on the importance of molecular pathology in oncology.",
+                    "**Patient Population**: Adult patients with advanced solid tumors (n=250), ages 18-75, ECOG performance status 0-2.",
+                    "**Primary Endpoint**: Overall response rate (ORR) to targeted therapy based on molecular profiling.",
                     "**Methodology Used**: The methodology involves various testing modalities such as Next-Generation Sequencing.",
                     "**Key Results and Findings**: Key findings highlight the role of biomarkers in guiding therapy.",
                     "**Main Conclusions and Implications**: The conclusions emphasize the importance of integrating molecular testing."
