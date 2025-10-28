@@ -11,6 +11,7 @@ class CameraViewModel: ObservableObject {
     
     private let ocrService = OCRService()
     private let openAIService = OpenAIService()
+    private let categoryService = CategoryExtractionService.shared
     // Changed from private to public so it can be set directly
     var dataStore: DataStore?
     
@@ -65,7 +66,7 @@ class CameraViewModel: ObservableObject {
                     let title = self.ocrService.extractPosterTitle(from: text)
                     print("📝 Extracted title: \(title)")
 
-                    // Create a new scan with the results
+                    // Create a new scan with the results (without categories initially)
                     let newScan = PosterScan(
                         title: title,
                         rawText: text,
@@ -80,6 +81,9 @@ class CameraViewModel: ObservableObject {
                     // Always save the scan to history
                     self.dataStore?.saveScan(newScan)
                     print("✅ Saved scan to dataStore")
+
+                    // Step 3: Extract categories in the background (non-blocking)
+                    self.extractCategories(for: newScan, rawText: text, summary: summary)
 
                 case .failure(let error):
                     print("❌ CameraViewModel received error: \(error.localizedDescription)")
@@ -102,6 +106,39 @@ class CameraViewModel: ObservableObject {
 
                     // Always save the fallback scan to history too
                     self.dataStore?.saveScan(fallbackScan)
+                }
+            }
+        }
+    }
+
+    private func extractCategories(for scan: PosterScan, rawText: String, summary: [String]) {
+        print("🏷️ Starting category extraction for scan: \(scan.id)")
+
+        categoryService.extractCategories(from: rawText, summary: summary) { [weak self] result in
+            guard let self = self else { return }
+
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let categories):
+                    print("✅ Extracted \(categories.count) categories: \(categories.map { $0.name })")
+
+                    // Update the scan with categories
+                    var updatedScan = scan
+                    updatedScan.categories = categories
+
+                    // Update currentScan if it's still the same scan
+                    if self.currentScan?.id == scan.id {
+                        self.currentScan = updatedScan
+                        print("✅ Updated currentScan with categories")
+                    }
+
+                    // Update the scan in dataStore (saveScan handles updates by checking ID)
+                    self.dataStore?.saveScan(updatedScan)
+                    print("✅ Updated scan in dataStore with categories")
+
+                case .failure(let error):
+                    print("⚠️ Category extraction failed: \(error.localizedDescription)")
+                    // Don't show error to user - categories are optional enhancement
                 }
             }
         }

@@ -46,6 +46,7 @@ struct SummaryView: View {
     @State private var showCamera = false
     @State private var showHistory = false
     @State private var showChat = false
+    @State private var showCategories = false
     
     var body: some View {
         ScrollView {
@@ -71,6 +72,41 @@ struct SummaryView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
                     .padding(.top, 8)
+
+                // Category tags with tap to see all
+                if let categories = scan.categories, !categories.isEmpty {
+                    Button(action: {
+                        HapticManager.shared.mediumImpact()
+                        showCategories = true
+                    }) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Research Categories")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            CategoryTagRow(categories: categories, maxVisible: 4, compact: false)
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(.systemBackground))
+                                .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
 
                 // Process summary points to extract headings and content
                 ForEach(processedSummaryPoints(), id: \.title) { point in
@@ -167,6 +203,9 @@ struct SummaryView: View {
                 SimpleChatView(posterScan: scan)
                     .environmentObject(dataStore)
             }
+        }
+        .sheet(isPresented: $showCategories) {
+            CategoryDetailSheet(scan: scan)
         }
     }
     

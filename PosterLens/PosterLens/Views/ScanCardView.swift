@@ -73,7 +73,7 @@ struct ScanCardView: View {
                             )
                     }
                     
-                    // Title overlay - UX: Use DesignSystem spacing
+                    // Title overlay with categories - UX: Use DesignSystem spacing
                     VStack(alignment: .leading, spacing: DesignSystem.Spacing.tiny) {
                         Text(scan.title)
                             .font(.subheadline)
@@ -83,6 +83,12 @@ struct ScanCardView: View {
                         Text(scan.dateFormatted)
                             .font(.caption2)
                             .foregroundColor(.secondary)
+
+                        // Category tags
+                        if let categories = scan.categories, !categories.isEmpty {
+                            CategoryTagRow(categories: categories, maxVisible: 3, compact: true)
+                                .padding(.top, 2)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(DesignSystem.Spacing.extraSmall)

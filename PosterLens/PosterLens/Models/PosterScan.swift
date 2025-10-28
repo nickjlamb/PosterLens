@@ -16,6 +16,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
     var hasPermission: Bool
     var researchContext: ResearchContext?
     var imageFilename: String?
+    var categories: [PosterCategory]?
     
     // UIImage can't be directly Codable, so we'll handle it separately
     // This is a transient property not stored in Codable representation
@@ -31,7 +32,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
         return formatter.string(from: date)
     }
     
-    init(title: String, rawText: String, summaryPoints: [String], image: UIImage?, date: Date, authorQuestions: [String]? = nil, hasPermission: Bool = false) {
+    init(title: String, rawText: String, summaryPoints: [String], image: UIImage?, date: Date, authorQuestions: [String]? = nil, hasPermission: Bool = false, categories: [PosterCategory]? = nil) {
         self.id = UUID()
         self.title = title
         self.rawText = rawText
@@ -40,7 +41,8 @@ struct PosterScan: Identifiable, Codable, Equatable {
         self.date = date
         self.authorQuestions = authorQuestions
         self.hasPermission = hasPermission
-        
+        self.categories = categories
+
         // Convert UIImage to Data for storage
         if let image = image {
             self.imageData = image.jpegData(compressionQuality: 0.7)
@@ -49,7 +51,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
     
     // Custom Codable implementation to handle UIImage
     enum CodingKeys: String, CodingKey {
-        case id, title, rawText, summaryPoints, date, imageData, authorQuestions, hasPermission, researchContext, imageFilename
+        case id, title, rawText, summaryPoints, date, imageData, authorQuestions, hasPermission, researchContext, imageFilename, categories
     }
     
     init(from decoder: Decoder) throws {
@@ -64,7 +66,8 @@ struct PosterScan: Identifiable, Codable, Equatable {
         hasPermission = try container.decodeIfPresent(Bool.self, forKey: .hasPermission) ?? false
         researchContext = try container.decodeIfPresent(ResearchContext.self, forKey: .researchContext)
         imageFilename = try container.decodeIfPresent(String.self, forKey: .imageFilename)
-        
+        categories = try container.decodeIfPresent([PosterCategory].self, forKey: .categories)
+
         // Convert Data back to UIImage
         if let imageData = imageData {
             image = UIImage(data: imageData)
@@ -83,6 +86,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
         try container.encode(hasPermission, forKey: .hasPermission)
         try container.encodeIfPresent(researchContext, forKey: .researchContext)
         try container.encodeIfPresent(imageFilename, forKey: .imageFilename)
+        try container.encodeIfPresent(categories, forKey: .categories)
     }
     
     // Create a new scan with updated questions but preserve the original ID
@@ -93,7 +97,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
     }
     
     // Constructor with all properties
-    init(title: String, rawText: String, summaryPoints: [String], image: UIImage?, date: Date, isSaved: Bool = false, authorQuestions: [String]? = nil, hasPermission: Bool = false, researchContext: ResearchContext? = nil, imageFilename: String? = nil) {
+    init(title: String, rawText: String, summaryPoints: [String], image: UIImage?, date: Date, isSaved: Bool = false, authorQuestions: [String]? = nil, hasPermission: Bool = false, researchContext: ResearchContext? = nil, imageFilename: String? = nil, categories: [PosterCategory]? = nil) {
         self.id = UUID()
         self.title = title
         self.rawText = rawText
@@ -104,7 +108,8 @@ struct PosterScan: Identifiable, Codable, Equatable {
         self.hasPermission = hasPermission
         self.researchContext = researchContext
         self.imageFilename = imageFilename
-        
+        self.categories = categories
+
         // Convert UIImage to Data for storage
         if let image = image {
             self.imageData = image.jpegData(compressionQuality: 0.7)
