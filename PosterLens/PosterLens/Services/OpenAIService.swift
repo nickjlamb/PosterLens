@@ -165,14 +165,20 @@ class OpenAIService {
         Please provide EXACTLY 6 bullet points covering:
         1. Main Research Question/Objective
         2. Patient Population (if applicable - include sample size, key inclusion/exclusion criteria, demographics)
-        3. Primary Endpoint (if applicable - the main outcome measure)
+        3. Primary Endpoint - IMPORTANT: Only include this if the poster explicitly uses the phrase "Primary Endpoint" or "primary endpoint". If found, copy the exact wording from the poster verbatim - do NOT paraphrase, infer, or rewrite it. If the poster does not explicitly mention "Primary Endpoint", write "Not applicable".
         4. Methodology Used
         5. Key Results and Findings
         6. Main Conclusions and Implications
 
         Format each point starting with "**[Category]**: " followed by the content.
 
-        If the poster is not a clinical study and patient population or primary endpoint are not applicable, briefly state "Not applicable" or provide the most relevant information for that category (e.g., for basic science: sample characteristics, primary measure).
+        For Primary Endpoint specifically:
+        - Search for the exact phrase "Primary Endpoint" or "primary endpoint" in the poster text
+        - If found, extract and return the EXACT text that follows it (verbatim quote from the poster)
+        - Do NOT infer, paraphrase, summarize, or rewrite the primary endpoint
+        - If "Primary Endpoint" is not explicitly mentioned, return "Not applicable"
+
+        If the poster is not a clinical study and patient population is not applicable, briefly state "Not applicable" or provide the most relevant information for that category (e.g., for basic science: sample characteristics).
 
         Text to summarize:
         \(text)
