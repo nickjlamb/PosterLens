@@ -123,7 +123,13 @@ struct FlowLayout: Layout {
             spacing: spacing
         )
         for (index, subview) in subviews.enumerated() {
-            subview.place(at: result.frames[index].origin, proposal: .unspecified)
+            let frame = result.frames[index]
+            // Offset the position by bounds.origin to place correctly
+            let position = CGPoint(
+                x: bounds.origin.x + frame.origin.x,
+                y: bounds.origin.y + frame.origin.y
+            )
+            subview.place(at: position, proposal: .unspecified)
         }
     }
 
