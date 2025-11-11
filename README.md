@@ -39,5 +39,5 @@ For details on how PosterLens uses the Perplexity API for both summary generatio
 This application is a submission for the Perplexity Hackathon 2025.
 
 ## License
-
-[MIT License](LICENSE)
+Educational and Non-Commercial Use Only  
+See the [LICENSE](LICENSE) file for full terms.
