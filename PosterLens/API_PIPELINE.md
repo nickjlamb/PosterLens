@@ -525,13 +525,35 @@ SecretManager.shared.loadAPIKey(for: "Perplexity_API_Key")
 
 ## Future API Enhancements
 
-**Potential additions:**
+### In Development: Evidence V2 API (Cloud Functions)
+
+A new backend service is being developed to provide RAG-based evidence retrieval:
+
+**Endpoint:** `POST /v2/evidence`
+
+**Purpose:** Enhanced paper discovery using:
+- BigQuery for PubMed paper metadata storage
+- Vertex AI for semantic search and embeddings
+- RAG (Retrieval-Augmented Generation) for context-aware results
+
+**Current Status:** Skeleton endpoint deployed (`functions/` directory)
+
+**Planned Architecture:**
+```
+iOS App → Cloud Function (evidenceV2)
+              ↓
+         BigQuery (PubMed metadata)
+              ↓
+         Vertex AI (embeddings/semantic search)
+              ↓
+         Enhanced citations returned to app
+```
+
+### Other Potential Additions
 1. **Semantic Scholar API** - Additional academic paper validation
 2. **arXiv API** - Direct preprint access
 3. **Crossref API** - DOI resolution and metadata
 4. **OpenAlex API** - Open citation data
-
-**Current status:** Not needed - current 3-API pipeline provides comprehensive coverage.
 
 ---
 

@@ -4,7 +4,8 @@
 
 - Xcode 15.0 or later
 - iOS 16.0 or later device or simulator
-- Perplexity API key
+- OpenAI API key (required for summarization and chat)
+- Perplexity API key (required for related research discovery)
 - Git installed
 
 ## Steps
@@ -20,34 +21,71 @@
    open PosterLens.xcodeproj
    ```
 
-3. Configure API Key:
-   - In Xcode, create a new Swift file called `Config.swift` in the PosterLens directory
-   - Add the following code, replacing `YOUR_API_KEY` with your Perplexity API key:
-     ```swift
-     struct Config {
-         static let perplexityAPIKey = "YOUR_API_KEY"
-     }
-     ```
+3. Configure API Keys:
+   Create a `Secrets.plist` file in the `PosterLens/PosterLens` directory with the following structure:
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+   <plist version="1.0">
+   <dict>
+       <key>OpenAI_API_Key</key>
+       <string>YOUR_OPENAI_API_KEY</string>
+       <key>Perplexity_API_Key</key>
+       <string>YOUR_PERPLEXITY_API_KEY</string>
+   </dict>
+   </plist>
+   ```
+
+   **Important:** `Secrets.plist` is gitignored and should never be committed to version control.
 
 4. Select your target device or simulator in Xcode
 
-5. Build and run the project (⌘+R)
+5. Build and run the project (Cmd+R)
 
-## Testing the Chat Feature
+## Getting API Keys
 
-To test the chat functionality:
-1. Scan a scientific poster using the camera
-2. View the summary screen
-3. Tap the "Chat with AI" button in the Explore Further section
-4. Type questions or select from suggested questions
-5. View AI-generated responses based on the poster content
+### OpenAI API Key
+1. Visit [OpenAI Platform](https://platform.openai.com/)
+2. Create an account or sign in
+3. Navigate to API Keys section
+4. Create a new API key
+5. Add to `Secrets.plist` as `OpenAI_API_Key`
+
+### Perplexity API Key
+1. Visit [Perplexity AI](https://www.perplexity.ai/)
+2. Sign up for API access
+3. Generate an API key
+4. Add to `Secrets.plist` as `Perplexity_API_Key`
+
+## Testing Features
+
+### Poster Scanning
+1. Open the app and point your camera at a scientific poster
+2. The app will automatically detect and capture the poster
+3. View the AI-generated structured summary
+
+### Chat Feature
+1. From the summary screen, tap "Chat with AI"
+2. Type questions or select from suggested questions
+3. View AI-generated responses based on the poster content
+
+### Related Research
+1. From the summary screen, tap "Related Research"
+2. View automatically discovered PubMed papers related to the poster
+3. Tap any citation to open it in PubMed
 
 ## Troubleshooting
 
 - **Camera Access**: Make sure to grant camera permissions when prompted
-- **Build Errors**: Ensure you're using the latest Swift and SwiftUI features compatible with your Xcode version
-- **API Issues**: Verify your Perplexity API key is valid and has sufficient quota remaining
+- **Build Errors**: Ensure you're using Xcode 15.0+ with Swift 5.7+
+- **API Issues**: Verify your API keys are valid and have sufficient quota
+- **Missing Secrets.plist**: Create the file as described in step 3 above
+- **No Related Research**: Ensure your Perplexity API key is valid and has Search API access
 
-## Running Without API Key
+## Architecture
 
-For demo purposes, the app includes a simulated response mode for the chat feature. This allows testing without making actual API calls.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for details on the app's structure.
+
+## API Pipeline
+
+See [API_PIPELINE.md](API_PIPELINE.md) for details on how the 4-stage API pipeline works.
