@@ -128,6 +128,56 @@ def fetch_paper_details(pmids: list[str], api_key: Optional[str] = None, batch_s
     return papers
 
 
+def extract_pub_year(article: ET.Element) -> Optional[int]:
+    """
+    Extract publication year from PubMed article XML.
+
+    Tries multiple date fields in order of preference:
+    1. PubDate/Year (article publication date)
+    2. PubDate/MedlineDate (fallback format like "2023 Jan-Feb")
+    3. ArticleDate/Year (electronic publication date)
+
+    Args:
+        article: XML Element for a PubMed article
+
+    Returns:
+        Publication year as integer, or None if not found
+    """
+    import re
+
+    # Try PubDate/Year first (most common)
+    pub_date = article.find(".//PubDate")
+    if pub_date is not None:
+        year_elem = pub_date.find("Year")
+        if year_elem is not None and year_elem.text:
+            try:
+                return int(year_elem.text)
+            except ValueError:
+                pass
+
+        # Try MedlineDate (format: "2023 Jan-Feb" or "2023")
+        medline_date = pub_date.find("MedlineDate")
+        if medline_date is not None and medline_date.text:
+            match = re.match(r"(\d{4})", medline_date.text)
+            if match:
+                try:
+                    return int(match.group(1))
+                except ValueError:
+                    pass
+
+    # Try ArticleDate (electronic publication)
+    article_date = article.find(".//ArticleDate")
+    if article_date is not None:
+        year_elem = article_date.find("Year")
+        if year_elem is not None and year_elem.text:
+            try:
+                return int(year_elem.text)
+            except ValueError:
+                pass
+
+    return None
+
+
 def parse_article(article: ET.Element) -> Optional[dict]:
     """
     Parse a PubmedArticle XML element into a dictionary.
@@ -136,7 +186,7 @@ def parse_article(article: ET.Element) -> Optional[dict]:
         article: XML Element for a PubMed article
 
     Returns:
-        Dictionary with pmid, title, abstract or None if parsing fails
+        Dictionary with pmid, title, abstract, pub_year or None if parsing fails
     """
     try:
         # Extract PMID
@@ -180,10 +230,14 @@ def parse_article(article: ET.Element) -> Optional[dict]:
         if not abstract:
             return None
 
+        # Extract publication year
+        pub_year = extract_pub_year(article)
+
         return {
             "pmid": pmid,
             "title": title,
             "abstract": abstract,
+            "pub_year": pub_year,
         }
 
     except Exception as e:

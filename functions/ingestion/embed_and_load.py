@@ -1,13 +1,29 @@
 #!/usr/bin/env python3
 """
-Embed and Load Script for PubMed RAG Pipeline
+Embed and Load Script for PubMed RAG Pipeline (Incremental)
 
 Loads papers from pubmed_subset.jsonl, generates embeddings using
-Vertex AI text-embedding-004, and inserts them into BigQuery.
+Vertex AI text-embedding-004, and APPENDS them to BigQuery.
+
+INCREMENTAL INGESTION:
+- Deduplicates by PMID (skips papers already in BigQuery)
+- Filters by pub_year (only 2020-2025)
+- Respects configurable MAX_PAPERS limit
+- Handles errors per-paper without stopping the run
+- Append-only: never deletes or modifies existing data
 
 Usage:
+    # Standard incremental run (default limit: 1000 papers)
     python embed_and_load.py --input pubmed_subset.jsonl
-    python embed_and_load.py --input pubmed_subset.jsonl --batch-size 50 --dry-run
+
+    # Larger batch with custom limit
+    python embed_and_load.py --input pubmed_subset.jsonl --max-papers 5000
+
+    # Dry run to test without loading
+    python embed_and_load.py --input pubmed_subset.jsonl --dry-run
+
+    # Just verify existing data
+    python embed_and_load.py --verify-only
 
 Requirements:
     pip install google-cloud-aiplatform google-cloud-bigquery
@@ -40,6 +56,37 @@ EMBEDDING_DIMENSION = 768
 EMBEDDING_BATCH_SIZE = 5  # Process 5 texts at a time
 EMBEDDING_DELAY = 0.5  # Seconds between batches
 
+# Incremental ingestion settings
+DEFAULT_MAX_PAPERS = 1000  # Conservative default to control costs
+MIN_YEAR = 2020  # Only ingest papers from 2020 onwards
+MAX_YEAR = 2025  # Up to and including 2025
+
+
+def fetch_existing_pmids() -> set[str]:
+    """
+    Fetch all existing PMIDs from BigQuery.
+
+    This enables deduplication: we skip any paper whose PMID
+    is already in the database, avoiding duplicate embeddings
+    and wasted API calls.
+
+    Returns:
+        Set of PMID strings already in BigQuery
+    """
+    print("Fetching existing PMIDs from BigQuery for deduplication...")
+    client = bigquery.Client(project=PROJECT_ID)
+
+    query = f"""
+    SELECT pmid
+    FROM `{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}`
+    """
+
+    results = client.query(query).result()
+    existing_pmids = {row.pmid for row in results}
+
+    print(f"  Found {len(existing_pmids)} existing PMIDs in database")
+    return existing_pmids
+
 
 def load_papers(input_path: Path) -> list[dict]:
     """
@@ -65,6 +112,72 @@ def load_papers(input_path: Path) -> list[dict]:
 
     print(f"Loaded {len(papers)} papers from {input_path}")
     return papers
+
+
+def filter_papers(
+    papers: list[dict],
+    existing_pmids: set[str],
+    max_papers: int,
+    min_year: int = MIN_YEAR,
+    max_year: int = MAX_YEAR,
+) -> tuple[list[dict], dict]:
+    """
+    Filter papers for incremental ingestion.
+
+    Applies three filters in order:
+    1. Deduplication: skip papers already in BigQuery
+    2. Year range: only include papers with valid pub_year in range
+    3. Max limit: cap total papers to control costs
+
+    Args:
+        papers: Raw list of paper dictionaries
+        existing_pmids: Set of PMIDs already in BigQuery
+        max_papers: Maximum number of papers to process
+        min_year: Minimum publication year (inclusive)
+        max_year: Maximum publication year (inclusive)
+
+    Returns:
+        Tuple of (filtered_papers, stats_dict)
+    """
+    stats = {
+        "total_input": len(papers),
+        "skipped_duplicate": 0,
+        "skipped_no_year": 0,
+        "skipped_year_range": 0,
+        "skipped_limit": 0,
+        "eligible": 0,
+    }
+
+    filtered = []
+
+    for paper in papers:
+        pmid = paper.get("pmid")
+        pub_year = paper.get("pub_year")
+
+        # 1. Deduplication: skip if PMID already exists
+        if pmid in existing_pmids:
+            stats["skipped_duplicate"] += 1
+            continue
+
+        # 2. Year validation: skip if no year or invalid
+        if pub_year is None:
+            stats["skipped_no_year"] += 1
+            continue
+
+        # 3. Year range: only 2020-2025
+        if not (min_year <= pub_year <= max_year):
+            stats["skipped_year_range"] += 1
+            continue
+
+        # 4. Max limit: stop if we've hit the cap
+        if len(filtered) >= max_papers:
+            stats["skipped_limit"] += 1
+            continue
+
+        filtered.append(paper)
+
+    stats["eligible"] = len(filtered)
+    return filtered, stats
 
 
 def generate_embeddings(
@@ -98,7 +211,10 @@ def embed_papers(
     progress_interval: int = 100,
 ) -> list[dict]:
     """
-    Generate embeddings for all papers.
+    Generate embeddings for papers with per-paper error handling.
+
+    If embedding fails for a paper, it's skipped and ingestion
+    continues. This ensures one bad record doesn't stop the run.
 
     Args:
         papers: List of paper dictionaries
@@ -117,6 +233,7 @@ def embed_papers(
     embedded_papers = []
     total = len(papers)
     failed = 0
+    failed_pmids = []
 
     print(f"\nGenerating embeddings for {total} papers...")
 
@@ -141,12 +258,16 @@ def embed_papers(
                     "title": paper.get("title", ""),
                     "abstract": paper.get("abstract", ""),
                     "embedding": embedding,
+                    "pub_year": paper.get("pub_year"),
                 }
                 embedded_papers.append(embedded_paper)
 
         except Exception as e:
-            print(f"Error embedding batch starting at {i}: {e}")
+            # Per-batch error handling: log and continue
+            # This ensures one bad batch doesn't stop the entire run
+            print(f"  Warning: Error embedding batch at {i}: {e}")
             failed += len(batch)
+            failed_pmids.extend([p.get("pmid", "unknown") for p in batch])
 
         # Progress update
         processed = min(i + batch_size, total)
@@ -157,6 +278,9 @@ def embed_papers(
         time.sleep(EMBEDDING_DELAY)
 
     print(f"\nEmbedding complete: {len(embedded_papers)} succeeded, {failed} failed")
+    if failed_pmids:
+        print(f"  Failed PMIDs: {failed_pmids[:10]}{'...' if len(failed_pmids) > 10 else ''}")
+
     return embedded_papers
 
 
@@ -166,7 +290,10 @@ def load_to_bigquery(
     dry_run: bool = False,
 ) -> int:
     """
-    Load papers with embeddings into BigQuery.
+    Append papers with embeddings to BigQuery.
+
+    IMPORTANT: This is append-only. It never deletes or modifies
+    existing data. Deduplication happens before this step.
 
     Args:
         papers: List of papers with embeddings
@@ -189,7 +316,7 @@ def load_to_bigquery(
     client = bigquery.Client(project=PROJECT_ID)
 
     table_ref = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
-    print(f"Loading {len(papers)} papers into {table_ref}...")
+    print(f"Appending {len(papers)} papers to {table_ref}...")
 
     total_inserted = 0
     total_errors = 0
@@ -200,7 +327,7 @@ def load_to_bigquery(
         errors = client.insert_rows_json(table_ref, batch)
 
         if errors:
-            print(f"Errors inserting batch at {i}: {errors[:3]}")  # Show first 3 errors
+            print(f"  Errors inserting batch at {i}: {errors[:3]}")  # Show first 3 errors
             total_errors += len(errors)
         else:
             total_inserted += len(batch)
@@ -223,9 +350,11 @@ def verify_data(limit: int = 5) -> None:
     print(f"\nVerifying data in BigQuery...")
     client = bigquery.Client(project=PROJECT_ID)
 
+    # Sample recent rows
     query = f"""
-    SELECT pmid, title, ARRAY_LENGTH(embedding) as embedding_dim
+    SELECT pmid, title, pub_year, ARRAY_LENGTH(embedding) as embedding_dim
     FROM `{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}`
+    ORDER BY pub_year DESC NULLS LAST
     LIMIT {limit}
     """
 
@@ -233,12 +362,24 @@ def verify_data(limit: int = 5) -> None:
 
     print(f"\nSample rows from {TABLE_ID}:")
     for row in results:
-        print(f"  PMID: {row.pmid}, Dims: {row.embedding_dim}, Title: {row.title[:60]}...")
+        year_str = str(row.pub_year) if row.pub_year else "NULL"
+        print(f"  PMID: {row.pmid}, Year: {year_str}, Dims: {row.embedding_dim}, Title: {row.title[:50]}...")
 
-    # Get total count
-    count_query = f"SELECT COUNT(*) as total FROM `{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}`"
-    count_result = list(client.query(count_query).result())[0]
-    print(f"\nTotal rows in table: {count_result.total}")
+    # Summary statistics
+    stats_query = f"""
+    SELECT
+        COUNT(*) AS total,
+        COUNTIF(pub_year BETWEEN {MIN_YEAR} AND {MAX_YEAR}) AS recent,
+        MIN(pub_year) AS oldest,
+        MAX(pub_year) AS newest
+    FROM `{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}`
+    """
+
+    stats_result = list(client.query(stats_query).result())[0]
+    print(f"\nTable statistics:")
+    print(f"  Total rows: {stats_result.total}")
+    print(f"  Recent ({MIN_YEAR}-{MAX_YEAR}): {stats_result.recent}")
+    print(f"  Year range: {stats_result.oldest} - {stats_result.newest}")
 
 
 def estimate_costs(num_papers: int, avg_abstract_length: int = 1500) -> dict:
@@ -277,18 +418,25 @@ def estimate_costs(num_papers: int, avg_abstract_length: int = 1500) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate embeddings and load PubMed papers into BigQuery",
+        description="Generate embeddings and append PubMed papers to BigQuery (incremental)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
+Incremental Ingestion Features:
+  - Deduplication: skips PMIDs already in BigQuery
+  - Year filtering: only processes papers from {MIN_YEAR}-{MAX_YEAR}
+  - Safety limit: caps papers to --max-papers (default: {DEFAULT_MAX_PAPERS})
+  - Error handling: continues if individual papers fail
+  - Append-only: never deletes or modifies existing data
+
 Examples:
-  # Standard run
+  # Standard incremental run
   python embed_and_load.py --input pubmed_subset.jsonl
+
+  # Larger batch with custom limit
+  python embed_and_load.py --input pubmed_subset.jsonl --max-papers 5000
 
   # Dry run to test without loading
   python embed_and_load.py --input pubmed_subset.jsonl --dry-run
-
-  # Custom batch size for large datasets
-  python embed_and_load.py --input pubmed_subset.jsonl --batch-size 100
 
   # Just verify existing data
   python embed_and_load.py --verify-only
@@ -307,6 +455,13 @@ Examples:
         type=int,
         default=EMBEDDING_BATCH_SIZE,
         help=f"Embedding batch size (default: {EMBEDDING_BATCH_SIZE})"
+    )
+
+    parser.add_argument(
+        "--max-papers", "-m",
+        type=int,
+        default=DEFAULT_MAX_PAPERS,
+        help=f"Maximum papers to process (default: {DEFAULT_MAX_PAPERS})"
     )
 
     parser.add_argument(
@@ -336,15 +491,12 @@ Examples:
 
     args = parser.parse_args()
 
-    # Update project ID if specified
-    project_id = args.project
-
     # Verify-only mode
     if args.verify_only:
         verify_data()
         return
 
-    # Load papers
+    # Load papers from file
     input_path = Path(args.input)
     if not input_path.exists():
         print(f"Error: Input file not found: {input_path}")
@@ -356,9 +508,34 @@ Examples:
         print("No papers to process")
         sys.exit(0)
 
+    # Fetch existing PMIDs for deduplication
+    existing_pmids = fetch_existing_pmids()
+
+    # Filter papers (dedup, year range, max limit)
+    filtered_papers, filter_stats = filter_papers(
+        papers,
+        existing_pmids,
+        max_papers=args.max_papers,
+        min_year=MIN_YEAR,
+        max_year=MAX_YEAR,
+    )
+
+    # Print filter statistics
+    print(f"\nFilter results:")
+    print(f"  Total input: {filter_stats['total_input']}")
+    print(f"  Skipped (duplicate): {filter_stats['skipped_duplicate']}")
+    print(f"  Skipped (no year): {filter_stats['skipped_no_year']}")
+    print(f"  Skipped (year out of range): {filter_stats['skipped_year_range']}")
+    print(f"  Skipped (over limit): {filter_stats['skipped_limit']}")
+    print(f"  Eligible for ingestion: {filter_stats['eligible']}")
+
+    if not filtered_papers:
+        print("\nNo new papers to process (all filtered out)")
+        sys.exit(0)
+
     # Estimate costs
-    costs = estimate_costs(len(papers))
-    print(f"\nEstimated costs:")
+    costs = estimate_costs(len(filtered_papers))
+    print(f"\nEstimated costs for {len(filtered_papers)} papers:")
     print(f"  Embedding: ${costs['embedding_cost']}")
     print(f"  BigQuery insert: ${costs['insert_cost']}")
     print(f"  Storage (monthly): ${costs['storage_cost_monthly']}")
@@ -368,13 +545,13 @@ Examples:
         return
 
     # Generate embeddings
-    embedded_papers = embed_papers(papers, args.batch_size)
+    embedded_papers = embed_papers(filtered_papers, args.batch_size)
 
     if not embedded_papers:
         print("No papers were successfully embedded")
         sys.exit(1)
 
-    # Load to BigQuery
+    # Load to BigQuery (append-only)
     inserted = load_to_bigquery(embedded_papers, dry_run=args.dry_run)
 
     if not args.dry_run and inserted > 0:
