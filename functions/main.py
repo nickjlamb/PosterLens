@@ -4,10 +4,14 @@ PosterLens Cloud Functions - Evidence V2 API
 This module provides the evidenceV2 endpoint for retrieving evidence-based
 research papers related to scientific poster content using RAG (Retrieval
 Augmented Generation) with BigQuery vector search and Vertex AI embeddings.
+
+Includes a lightweight, deterministic re-ranking layer that adjusts paper
+ordering based on recency, keyword overlap, and specificity signals.
 """
 
 import json
 import logging
+import re
 from datetime import datetime
 from functools import wraps
 
@@ -36,6 +40,52 @@ DATASET_ID = "pubmed_rag"
 TABLE_ID = "papers"
 EMBEDDING_MODEL = "text-embedding-004"
 
+# =============================================================================
+# Re-Ranking Configuration
+# =============================================================================
+# These boosts are intentionally small so vector similarity remains dominant.
+# All values are additive adjustments to the similarity score (0.0 - 1.0 range).
+
+# Recency boost: papers from recent years get a small boost
+RERANK_RECENCY_BOOST = 0.03          # Max boost for very recent papers
+RERANK_RECENCY_WINDOW_YEARS = 5      # Papers within this window get full boost
+RERANK_RECENCY_DECAY_YEARS = 10      # Papers older than this get no boost
+
+# Keyword overlap boost: papers matching poster keywords get a boost
+RERANK_KEYWORD_BOOST = 0.04          # Max boost for high keyword overlap
+RERANK_KEYWORD_MIN_MATCHES = 2       # Minimum matches to trigger any boost
+RERANK_KEYWORD_FULL_MATCHES = 5      # Matches needed for full boost
+
+# Generic penalty: penalise papers with very generic review language
+RERANK_GENERIC_PENALTY = -0.02       # Penalty for generic review papers
+
+# Common scientific stopwords to exclude from keyword extraction
+SCIENTIFIC_STOPWORDS = {
+    "study", "studies", "research", "results", "analysis", "method", "methods",
+    "conclusion", "conclusions", "objective", "objectives", "background",
+    "introduction", "discussion", "patients", "patient", "treatment",
+    "treatments", "therapy", "clinical", "trial", "trials", "data", "group",
+    "groups", "effect", "effects", "significant", "significantly", "compared",
+    "showed", "shown", "found", "associated", "using", "based", "including",
+    "included", "reported", "observed", "performed", "evaluated", "assessed",
+    "determined", "identified", "demonstrated", "indicate", "indicates",
+    "suggest", "suggests", "present", "presented", "review", "reviewed",
+    "article", "paper", "abstract", "figure", "table", "published"
+}
+
+# Phrases that indicate a generic review paper (lower specificity)
+GENERIC_REVIEW_PHRASES = [
+    "comprehensive review",
+    "systematic review",
+    "literature review",
+    "narrative review",
+    "overview of",
+    "current landscape",
+    "state of the art",
+    "recent advances in",
+    "emerging trends",
+]
+
 # Initialize Vertex AI
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
@@ -44,6 +94,194 @@ embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
 bq_client = bigquery.Client(project=PROJECT_ID)
 
 logger.info(f"Initialized RAG pipeline: project={PROJECT_ID}, location={LOCATION}")
+
+
+# =============================================================================
+# Re-Ranking Functions
+# =============================================================================
+
+def extract_keywords(text: str, max_keywords: int = 20) -> set:
+    """
+    Extract meaningful keywords from text for re-ranking comparison.
+
+    Strategy:
+    - Tokenize and lowercase
+    - Filter out stopwords and very short words
+    - Keep words that look like scientific terms (longer, possibly hyphenated)
+
+    Args:
+        text: Input text (poster content)
+        max_keywords: Maximum number of keywords to return
+
+    Returns:
+        Set of lowercase keyword strings
+    """
+    # Tokenize: split on whitespace and punctuation, keep hyphens within words
+    words = re.findall(r'\b[a-zA-Z][-a-zA-Z]{2,}\b', text.lower())
+
+    # Filter out stopwords and common scientific terms
+    keywords = [
+        w for w in words
+        if w not in SCIENTIFIC_STOPWORDS
+        and len(w) >= 4  # Skip very short words
+    ]
+
+    # Count frequency and take top N unique keywords
+    from collections import Counter
+    word_counts = Counter(keywords)
+    top_keywords = {word for word, _ in word_counts.most_common(max_keywords)}
+
+    return top_keywords
+
+
+def compute_recency_boost(year: int) -> float:
+    """
+    Compute a recency boost for a paper based on publication year.
+
+    Heuristic:
+    - Papers within RERANK_RECENCY_WINDOW_YEARS get full boost
+    - Papers between window and decay threshold get proportional boost
+    - Papers older than RERANK_RECENCY_DECAY_YEARS get no boost
+
+    Args:
+        year: Publication year of the paper
+
+    Returns:
+        Boost value (0.0 to RERANK_RECENCY_BOOST)
+    """
+    if year is None or year <= 0:
+        return 0.0
+
+    current_year = datetime.utcnow().year
+    age = current_year - year
+
+    if age <= RERANK_RECENCY_WINDOW_YEARS:
+        # Full boost for recent papers
+        return RERANK_RECENCY_BOOST
+    elif age <= RERANK_RECENCY_DECAY_YEARS:
+        # Linear decay between window and cutoff
+        decay_range = RERANK_RECENCY_DECAY_YEARS - RERANK_RECENCY_WINDOW_YEARS
+        age_beyond_window = age - RERANK_RECENCY_WINDOW_YEARS
+        decay_factor = 1.0 - (age_beyond_window / decay_range)
+        return RERANK_RECENCY_BOOST * decay_factor
+    else:
+        # No boost for old papers
+        return 0.0
+
+
+def compute_keyword_boost(paper_text: str, poster_keywords: set) -> float:
+    """
+    Compute a keyword overlap boost based on shared terms.
+
+    Heuristic:
+    - Count how many poster keywords appear in the paper's title/abstract
+    - Require minimum matches to avoid noise
+    - Scale linearly up to full boost
+
+    Args:
+        paper_text: Combined title + abstract of the paper
+        poster_keywords: Set of keywords extracted from poster
+
+    Returns:
+        Boost value (0.0 to RERANK_KEYWORD_BOOST)
+    """
+    if not poster_keywords:
+        return 0.0
+
+    paper_lower = paper_text.lower()
+    matches = sum(1 for kw in poster_keywords if kw in paper_lower)
+
+    if matches < RERANK_KEYWORD_MIN_MATCHES:
+        return 0.0
+
+    # Scale linearly from min to full matches
+    effective_matches = min(matches, RERANK_KEYWORD_FULL_MATCHES)
+    match_range = RERANK_KEYWORD_FULL_MATCHES - RERANK_KEYWORD_MIN_MATCHES
+    if match_range <= 0:
+        return RERANK_KEYWORD_BOOST
+
+    progress = (effective_matches - RERANK_KEYWORD_MIN_MATCHES) / match_range
+    return RERANK_KEYWORD_BOOST * progress
+
+
+def compute_generic_penalty(title: str, abstract: str) -> float:
+    """
+    Apply a small penalty to papers with very generic review language.
+
+    Heuristic:
+    - Check for phrases that indicate a broad review rather than specific research
+    - Only penalise if found in title (stronger signal) or prominently in abstract
+
+    This helps surface specific studies over broad reviews when similarity is close.
+
+    Args:
+        title: Paper title
+        abstract: Paper abstract
+
+    Returns:
+        Penalty value (RERANK_GENERIC_PENALTY or 0.0)
+    """
+    title_lower = title.lower() if title else ""
+    abstract_lower = abstract.lower() if abstract else ""
+
+    # Check title first (stronger signal)
+    for phrase in GENERIC_REVIEW_PHRASES:
+        if phrase in title_lower:
+            return RERANK_GENERIC_PENALTY
+
+    # Check abstract (only first 200 chars where review type is usually stated)
+    abstract_start = abstract_lower[:200]
+    for phrase in GENERIC_REVIEW_PHRASES:
+        if phrase in abstract_start:
+            return RERANK_GENERIC_PENALTY
+
+    return 0.0
+
+
+def rerank_papers(papers: list, poster_text: str) -> list:
+    """
+    Apply deterministic re-ranking to a list of papers.
+
+    The re-ranking applies small additive boosts/penalties to the base
+    similarity score. Vector similarity remains the dominant signal.
+
+    Boosts applied:
+    1. Recency boost: favours papers from the last ~5 years
+    2. Keyword overlap: favours papers matching poster terminology
+    3. Generic penalty: slightly penalises broad review papers
+
+    Args:
+        papers: List of paper dicts with 'similarity_score', 'title', 'abstract'
+        poster_text: Original poster text for keyword extraction
+
+    Returns:
+        Papers list sorted by rerank_score (descending), with both scores included
+    """
+    # Extract keywords from poster for overlap comparison
+    poster_keywords = extract_keywords(poster_text)
+
+    for paper in papers:
+        similarity = paper.get("similarity_score", 0.0)
+
+        # Combine title and abstract for text matching
+        paper_text = f"{paper.get('title', '')} {paper.get('abstract', '')}"
+
+        # Compute individual adjustments
+        recency = compute_recency_boost(paper.get("year"))
+        keyword = compute_keyword_boost(paper_text, poster_keywords)
+        generic = compute_generic_penalty(paper.get("title", ""), paper.get("abstract", ""))
+
+        # Final re-rank score
+        rerank_score = similarity + recency + keyword + generic
+
+        # Store both scores for transparency
+        paper["rerank_score"] = round(rerank_score, 4)
+        # similarity_score is already set
+
+    # Sort by rerank_score descending
+    papers.sort(key=lambda p: p.get("rerank_score", 0), reverse=True)
+
+    return papers
 
 
 class ValidationError(Exception):
@@ -224,6 +462,7 @@ def evidence_v2(request: Request):
             raise Exception(f"Failed to generate embedding: {str(e)}")
 
         # Step 2: Build vector search query
+        # Fetch more candidates than needed for re-ranking, then trim to top 5
         vector_search_query = f"""
         SELECT
             pmid,
@@ -233,7 +472,7 @@ def evidence_v2(request: Request):
         FROM `{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}`
         WHERE embedding IS NOT NULL
         ORDER BY distance ASC
-        LIMIT 5
+        LIMIT 10
         """
 
         # Step 3: Execute BigQuery vector search
@@ -263,21 +502,47 @@ def evidence_v2(request: Request):
                 "pmid": row.pmid,
                 "title": row.title,
                 "abstract": row.abstract,
-                "score": round(similarity_score, 4)
+                "similarity_score": round(similarity_score, 4),
+                # Year not currently in BigQuery schema; recency boost will be 0
+                # TODO: Add year column to papers table for recency boosting
+                "year": None,
             })
 
-        logger.info(f"Found {len(papers)} relevant papers")
+        logger.info(f"Found {len(papers)} candidate papers for re-ranking")
 
-        # Step 5: Build response
+        # Step 5: Apply deterministic re-ranking
+        # This adjusts ordering based on keyword overlap and specificity,
+        # while keeping vector similarity as the dominant signal.
+        papers = rerank_papers(papers, text)
+
+        # Trim to top 5 after re-ranking
+        papers = papers[:5]
+
+        logger.info(f"Returning top {len(papers)} papers after re-ranking")
+
+        # Step 6: Build response
+        # Return both similarity_score (raw) and score (final rerank_score) for transparency
+        # The 'score' field is used by the iOS app for display
+        response_papers = []
+        for paper in papers:
+            response_papers.append({
+                "pmid": paper["pmid"],
+                "title": paper["title"],
+                "abstract": paper["abstract"],
+                "score": paper["rerank_score"],           # Final score used for ordering
+                "similarity_score": paper["similarity_score"],  # Raw vector similarity
+            })
+
         response_data = {
             "status": "ok",
-            "papers": papers,
+            "papers": response_papers,
             "metadata": {
-                "version": "2.1.0",
+                "version": "2.2.0",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "text_length": len(text),
-                "results": len(papers),
+                "results": len(response_papers),
                 "mode": "rag",
+                "reranking": "enabled",
             }
         }
 
