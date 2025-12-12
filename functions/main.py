@@ -111,6 +111,64 @@ EXPLAIN_DEFAULT = "Related to the poster's research area."
 EXPLAIN_KEYWORD_THRESHOLD = 3      # Min keyword matches to mention keywords
 EXPLAIN_SIMILARITY_STRONG = 0.60   # Similarity score considered "strong"
 
+# =============================================================================
+# Explanation Keyword Filtering
+# =============================================================================
+# These filters apply ONLY to explanation text generation, not to ranking.
+# The goal is to surface biomedically meaningful terms that read naturally.
+
+# Minimum length for keywords shown in explanations (shorter terms are often generic)
+EXPLAIN_KEYWORD_MIN_LENGTH = 5
+
+# Maximum keywords to display in explanation text
+EXPLAIN_KEYWORD_MAX_DISPLAY = 3
+
+# Stopwords to exclude from explanation keywords (but NOT from ranking)
+# This is intentionally separate from SCIENTIFIC_STOPWORDS to allow different
+# filtering for ranking vs. explanation purposes.
+EXPLAIN_STOPWORDS = {
+    # General English stopwords
+    "about", "after", "also", "another", "based", "been", "being", "between",
+    "both", "could", "different", "does", "doing", "done", "during", "each",
+    "either", "even", "every", "first", "from", "have", "having", "here",
+    "high", "however", "into", "just", "known", "large", "last", "left",
+    "level", "levels", "like", "long", "made", "main", "major", "make",
+    "many", "more", "most", "much", "near", "need", "needs", "next", "only",
+    "other", "over", "part", "play", "plays", "post", "rate", "rates",
+    "related", "right", "role", "same", "several", "short", "show", "shows",
+    "single", "small", "some", "specific", "such", "take", "takes", "term",
+    "terms", "than", "that", "their", "them", "then", "there", "these",
+    "they", "this", "those", "through", "time", "type", "types", "under",
+    "used", "using", "various", "very", "well", "were", "what", "when",
+    "where", "which", "while", "will", "with", "within", "without", "would",
+    "your",
+
+    # Academic/structural terms (low information value in explanations)
+    "abstract", "across", "activity", "additional", "aims", "among",
+    "analysis", "approach", "article", "association", "available",
+    "average", "case", "cases", "cell", "cells", "change", "changes",
+    "characteristics", "common", "compared", "conclusion", "conclusions",
+    "conditions", "control", "current", "data", "design", "development",
+    "difference", "differences", "disease", "diseases", "early", "effect",
+    "effects", "evidence", "expression", "factor", "factors", "features",
+    "findings", "following", "function", "general", "group", "groups",
+    "health", "human", "important", "improved", "increase", "increased",
+    "information", "initial", "level", "levels", "loss", "lower", "higher",
+    "measure", "measured", "measures", "mechanism", "mechanisms", "model",
+    "models", "multiple", "normal", "novel", "number", "observed",
+    "outcome", "outcomes", "overall", "paper", "parameters", "patients",
+    "pattern", "patterns", "period", "population", "potential", "present",
+    "primary", "process", "processes", "profile", "progress", "provided",
+    "quality", "range", "recent", "reduction", "regions", "report",
+    "reported", "reports", "required", "response", "responses", "result",
+    "results", "review", "sample", "samples", "score", "scores", "setting",
+    "showed", "shown", "significant", "significantly", "similar", "standard",
+    "status", "strategy", "structure", "studies", "study", "subjects",
+    "support", "system", "systems", "target", "targets", "test", "tests",
+    "total", "treatment", "treatments", "trial", "trials", "tumor", "tumors",
+    "tumour", "tumours", "value", "values", "years",
+}
+
 # Initialize Vertex AI
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
@@ -264,6 +322,44 @@ def compute_generic_penalty(title: str, abstract: str) -> tuple:
     return 0.0, False
 
 
+def filter_keywords_for_explanation(keywords: list) -> list:
+    """
+    Filter keywords to select only biomedically meaningful terms for display.
+
+    This filtering applies ONLY to explanation text, not to ranking calculations.
+    The goal is to surface terms that:
+    - Are specific enough to be informative
+    - Read naturally to a conference attendee
+    - Represent domain-relevant concepts
+
+    Args:
+        keywords: Raw list of matched keywords from ranking
+
+    Returns:
+        Filtered list of keywords suitable for explanation display
+    """
+    filtered = []
+    for kw in keywords:
+        kw_lower = kw.lower()
+
+        # Skip if too short (generic terms tend to be short)
+        if len(kw_lower) < EXPLAIN_KEYWORD_MIN_LENGTH:
+            continue
+
+        # Skip if in explanation stopwords
+        if kw_lower in EXPLAIN_STOPWORDS:
+            continue
+
+        filtered.append(kw_lower)
+
+    # Sort by length descending to prioritize longer, more specific terms
+    # Longer terms like "immunotherapy" are more informative than "cancer"
+    filtered.sort(key=len, reverse=True)
+
+    # Return up to max display count
+    return filtered[:EXPLAIN_KEYWORD_MAX_DISPLAY]
+
+
 def generate_why_relevant(
     similarity_score: float,
     matched_keywords: list,
@@ -274,7 +370,7 @@ def generate_why_relevant(
     Generate a deterministic, human-readable explanation for why a paper was selected.
 
     The explanation is based on a priority order of signals:
-    1. High keyword overlap → mention the matching terms
+    1. High keyword overlap → mention the matching terms (filtered for quality)
     2. Review article → acknowledge it provides overview context
     3. Strong similarity → note the semantic match
     4. Default → generic relevance statement
@@ -290,14 +386,21 @@ def generate_why_relevant(
     Returns:
         A short explanation string (max ~15 words)
     """
-    keyword_count = len(matched_keywords)
+    # Check if we have enough raw keyword matches to consider keyword-based explanation
+    # Note: We use raw count for the threshold check (ranking signal),
+    # but filtered keywords for the actual explanation text (readability)
+    raw_keyword_count = len(matched_keywords)
 
-    # Priority 1: High keyword overlap - most specific explanation
-    if keyword_count >= EXPLAIN_KEYWORD_THRESHOLD:
-        # Select top 3 keywords for display (prefer shorter, more readable ones)
-        display_keywords = sorted(matched_keywords, key=len)[:3]
-        keywords_str = ", ".join(display_keywords)
-        return EXPLAIN_KEYWORD_OVERLAP.format(keywords=keywords_str)
+    if raw_keyword_count >= EXPLAIN_KEYWORD_THRESHOLD:
+        # Filter keywords for display quality
+        # This filtering is for explanation readability only, not ranking
+        display_keywords = filter_keywords_for_explanation(matched_keywords)
+
+        if display_keywords:
+            # We have good keywords to show
+            keywords_str = ", ".join(display_keywords)
+            return EXPLAIN_KEYWORD_OVERLAP.format(keywords=keywords_str)
+        # If filtering removed all keywords, fall through to other explanations
 
     # Priority 2: Review article - useful context even if keywords are sparse
     if is_review:
