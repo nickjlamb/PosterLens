@@ -86,6 +86,31 @@ GENERIC_REVIEW_PHRASES = [
     "emerging trends",
 ]
 
+# =============================================================================
+# Explanation Templates
+# =============================================================================
+# Templates for the "why_relevant" field. Each template is selected based on
+# which heuristic signal is most prominent for the paper. Only one is used.
+
+# High keyword overlap (≥3 matches)
+EXPLAIN_KEYWORD_OVERLAP = "Matches key terms from the poster: {keywords}."
+
+# Paper is a review article
+EXPLAIN_REVIEW_ARTICLE = "Provides a review of concepts related to the poster topic."
+
+# Strong semantic similarity but few keyword matches
+EXPLAIN_SEMANTIC_SIMILARITY = "Strong semantic similarity to the poster content."
+
+# Recency boost applied (for future use when year is available)
+EXPLAIN_RECENT_STUDY = "Recent study closely aligned with the poster topic."
+
+# Default fallback
+EXPLAIN_DEFAULT = "Related to the poster's research area."
+
+# Thresholds for explanation selection
+EXPLAIN_KEYWORD_THRESHOLD = 3      # Min keyword matches to mention keywords
+EXPLAIN_SIMILARITY_STRONG = 0.60   # Similarity score considered "strong"
+
 # Initialize Vertex AI
 vertexai.init(project=PROJECT_ID, location=LOCATION)
 
@@ -169,7 +194,7 @@ def compute_recency_boost(year: int) -> float:
         return 0.0
 
 
-def compute_keyword_boost(paper_text: str, poster_keywords: set) -> float:
+def compute_keyword_boost(paper_text: str, poster_keywords: set) -> tuple:
     """
     Compute a keyword overlap boost based on shared terms.
 
@@ -183,28 +208,29 @@ def compute_keyword_boost(paper_text: str, poster_keywords: set) -> float:
         poster_keywords: Set of keywords extracted from poster
 
     Returns:
-        Boost value (0.0 to RERANK_KEYWORD_BOOST)
+        Tuple of (boost_value, matched_keywords_list)
     """
     if not poster_keywords:
-        return 0.0
+        return 0.0, []
 
     paper_lower = paper_text.lower()
-    matches = sum(1 for kw in poster_keywords if kw in paper_lower)
+    matched = [kw for kw in poster_keywords if kw in paper_lower]
+    match_count = len(matched)
 
-    if matches < RERANK_KEYWORD_MIN_MATCHES:
-        return 0.0
+    if match_count < RERANK_KEYWORD_MIN_MATCHES:
+        return 0.0, matched
 
     # Scale linearly from min to full matches
-    effective_matches = min(matches, RERANK_KEYWORD_FULL_MATCHES)
+    effective_matches = min(match_count, RERANK_KEYWORD_FULL_MATCHES)
     match_range = RERANK_KEYWORD_FULL_MATCHES - RERANK_KEYWORD_MIN_MATCHES
     if match_range <= 0:
-        return RERANK_KEYWORD_BOOST
+        return RERANK_KEYWORD_BOOST, matched
 
     progress = (effective_matches - RERANK_KEYWORD_MIN_MATCHES) / match_range
-    return RERANK_KEYWORD_BOOST * progress
+    return RERANK_KEYWORD_BOOST * progress, matched
 
 
-def compute_generic_penalty(title: str, abstract: str) -> float:
+def compute_generic_penalty(title: str, abstract: str) -> tuple:
     """
     Apply a small penalty to papers with very generic review language.
 
@@ -219,7 +245,7 @@ def compute_generic_penalty(title: str, abstract: str) -> float:
         abstract: Paper abstract
 
     Returns:
-        Penalty value (RERANK_GENERIC_PENALTY or 0.0)
+        Tuple of (penalty_value, is_review_bool)
     """
     title_lower = title.lower() if title else ""
     abstract_lower = abstract.lower() if abstract else ""
@@ -227,15 +253,66 @@ def compute_generic_penalty(title: str, abstract: str) -> float:
     # Check title first (stronger signal)
     for phrase in GENERIC_REVIEW_PHRASES:
         if phrase in title_lower:
-            return RERANK_GENERIC_PENALTY
+            return RERANK_GENERIC_PENALTY, True
 
     # Check abstract (only first 200 chars where review type is usually stated)
     abstract_start = abstract_lower[:200]
     for phrase in GENERIC_REVIEW_PHRASES:
         if phrase in abstract_start:
-            return RERANK_GENERIC_PENALTY
+            return RERANK_GENERIC_PENALTY, True
 
-    return 0.0
+    return 0.0, False
+
+
+def generate_why_relevant(
+    similarity_score: float,
+    matched_keywords: list,
+    is_review: bool,
+    has_recency_boost: bool
+) -> str:
+    """
+    Generate a deterministic, human-readable explanation for why a paper was selected.
+
+    The explanation is based on a priority order of signals:
+    1. High keyword overlap → mention the matching terms
+    2. Review article → acknowledge it provides overview context
+    3. Strong similarity → note the semantic match
+    4. Default → generic relevance statement
+
+    Only one explanation is returned per paper to keep it concise.
+
+    Args:
+        similarity_score: Raw vector similarity (0.0 - 1.0)
+        matched_keywords: List of poster keywords found in the paper
+        is_review: Whether the paper was detected as a review article
+        has_recency_boost: Whether the paper received a recency boost
+
+    Returns:
+        A short explanation string (max ~15 words)
+    """
+    keyword_count = len(matched_keywords)
+
+    # Priority 1: High keyword overlap - most specific explanation
+    if keyword_count >= EXPLAIN_KEYWORD_THRESHOLD:
+        # Select top 3 keywords for display (prefer shorter, more readable ones)
+        display_keywords = sorted(matched_keywords, key=len)[:3]
+        keywords_str = ", ".join(display_keywords)
+        return EXPLAIN_KEYWORD_OVERLAP.format(keywords=keywords_str)
+
+    # Priority 2: Review article - useful context even if keywords are sparse
+    if is_review:
+        return EXPLAIN_REVIEW_ARTICLE
+
+    # Priority 3: Strong semantic similarity
+    if similarity_score >= EXPLAIN_SIMILARITY_STRONG:
+        return EXPLAIN_SEMANTIC_SIMILARITY
+
+    # Priority 4: Recent study (when recency data is available)
+    if has_recency_boost:
+        return EXPLAIN_RECENT_STUDY
+
+    # Fallback: generic relevance
+    return EXPLAIN_DEFAULT
 
 
 def rerank_papers(papers: list, poster_text: str) -> list:
@@ -250,12 +327,14 @@ def rerank_papers(papers: list, poster_text: str) -> list:
     2. Keyword overlap: favours papers matching poster terminology
     3. Generic penalty: slightly penalises broad review papers
 
+    Also generates a "why_relevant" explanation for each paper.
+
     Args:
         papers: List of paper dicts with 'similarity_score', 'title', 'abstract'
         poster_text: Original poster text for keyword extraction
 
     Returns:
-        Papers list sorted by rerank_score (descending), with both scores included
+        Papers list sorted by rerank_score (descending), with scores and explanations
     """
     # Extract keywords from poster for overlap comparison
     poster_keywords = extract_keywords(poster_text)
@@ -266,17 +345,27 @@ def rerank_papers(papers: list, poster_text: str) -> list:
         # Combine title and abstract for text matching
         paper_text = f"{paper.get('title', '')} {paper.get('abstract', '')}"
 
-        # Compute individual adjustments
-        recency = compute_recency_boost(paper.get("year"))
-        keyword = compute_keyword_boost(paper_text, poster_keywords)
-        generic = compute_generic_penalty(paper.get("title", ""), paper.get("abstract", ""))
+        # Compute individual adjustments (now returning extra info for explanations)
+        recency_boost = compute_recency_boost(paper.get("year"))
+        keyword_boost, matched_keywords = compute_keyword_boost(paper_text, poster_keywords)
+        generic_penalty, is_review = compute_generic_penalty(
+            paper.get("title", ""),
+            paper.get("abstract", "")
+        )
 
         # Final re-rank score
-        rerank_score = similarity + recency + keyword + generic
+        rerank_score = similarity + recency_boost + keyword_boost + generic_penalty
 
-        # Store both scores for transparency
+        # Store scores for transparency
         paper["rerank_score"] = round(rerank_score, 4)
-        # similarity_score is already set
+
+        # Generate explanation based on signals
+        paper["why_relevant"] = generate_why_relevant(
+            similarity_score=similarity,
+            matched_keywords=matched_keywords,
+            is_review=is_review,
+            has_recency_boost=(recency_boost > 0)
+        )
 
     # Sort by rerank_score descending
     papers.sort(key=lambda p: p.get("rerank_score", 0), reverse=True)
@@ -523,6 +612,7 @@ def evidence_v2(request: Request):
         # Step 6: Build response
         # Return both similarity_score (raw) and score (final rerank_score) for transparency
         # The 'score' field is used by the iOS app for display
+        # The 'why_relevant' field provides a human-readable explanation
         response_papers = []
         for paper in papers:
             response_papers.append({
@@ -531,13 +621,14 @@ def evidence_v2(request: Request):
                 "abstract": paper["abstract"],
                 "score": paper["rerank_score"],           # Final score used for ordering
                 "similarity_score": paper["similarity_score"],  # Raw vector similarity
+                "why_relevant": paper["why_relevant"],    # Human-readable explanation
             })
 
         response_data = {
             "status": "ok",
             "papers": response_papers,
             "metadata": {
-                "version": "2.2.0",
+                "version": "2.3.0",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "text_length": len(text),
                 "results": len(response_papers),
