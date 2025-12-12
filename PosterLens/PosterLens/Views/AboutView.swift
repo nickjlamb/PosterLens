@@ -34,8 +34,8 @@ struct AboutView: View {
     
     // App version and build number
     private var appVersion: String {
-        let version = "1.3" // Updated version number
-        let build = "5" // Updated build number
+        let version = "1.4.0" // Updated version number
+        let build = "6" // Updated build number
         return "Version \(version) (\(build))"
     }
     
