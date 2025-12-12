@@ -1,0 +1,26 @@
+# Secrets - DO NOT COMMIT
+**/Secrets.plist
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Build
+build/
+DerivedData/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# IDE
+.vscode/
+.idea/

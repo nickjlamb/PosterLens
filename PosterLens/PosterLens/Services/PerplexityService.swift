@@ -1219,7 +1219,59 @@ class PerplexityService {
         if citations.count > 5 {
             citations = Array(citations.prefix(5))
         }
-        
+
         return citations
+    }
+}
+
+// MARK: - RAG Integration (behind FeatureFlags.usePubMedRAG)
+
+extension PerplexityService {
+
+    /// New entry point for Related Research.
+    /// Automatically chooses RAG or Perplexity based on FeatureFlags.
+    func fetchRelatedResearch(for text: String) async -> [PaperResult] {
+
+        // 1. Try RAG if enabled
+        if FeatureFlags.usePubMedRAG {
+            do {
+                let ragResult = try await RAGEvidenceService.shared.fetchEvidence(for: text)
+                return ragResult.papers
+            } catch {
+                print("[RAG] Failed, falling back to Perplexity: \(error)")
+            }
+        }
+
+        // 2. Fallback to Perplexity (existing flow)
+        do {
+            let perplexityCitations = try await fetchCitationsAsync(from: text)
+
+            // Convert Citation type into [PaperResult]
+            return perplexityCitations.map {
+                PaperResult(
+                    title: $0.title,
+                    abstract: $0.abstract,
+                    pmid: nil,
+                    score: nil
+                )
+            }
+        } catch {
+            print("[Perplexity] Failed: \(error)")
+            return []
+        }
+    }
+
+    /// Async wrapper for generateLiteratureCitations
+    private func fetchCitationsAsync(from text: String) async throws -> [Citation] {
+        try await withCheckedThrowingContinuation { continuation in
+            generateLiteratureCitations(from: [], rawText: text) { result in
+                switch result {
+                case .success(let citations):
+                    continuation.resume(returning: citations)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 }

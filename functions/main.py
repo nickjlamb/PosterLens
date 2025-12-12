@@ -2,7 +2,8 @@
 PosterLens Cloud Functions - Evidence V2 API
 
 This module provides the evidenceV2 endpoint for retrieving evidence-based
-research papers related to scientific poster content.
+research papers related to scientific poster content using RAG (Retrieval
+Augmented Generation) with BigQuery vector search and Vertex AI embeddings.
 """
 
 import json
@@ -13,12 +14,36 @@ from functools import wraps
 import functions_framework
 from flask import jsonify, Request
 
+# Vertex AI and BigQuery imports
+import vertexai
+from vertexai.language_models import TextEmbeddingModel
+from google.cloud import bigquery
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# RAG Pipeline Configuration (initialized once for warm starts)
+# =============================================================================
+
+PROJECT_ID = "posterlens-backend"
+LOCATION = "europe-west2"
+DATASET_ID = "pubmed_rag"
+TABLE_ID = "papers"
+EMBEDDING_MODEL = "text-embedding-004"
+
+# Initialize Vertex AI
+vertexai.init(project=PROJECT_ID, location=LOCATION)
+
+# Initialize clients (warm-start optimization)
+embedding_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
+bq_client = bigquery.Client(project=PROJECT_ID)
+
+logger.info(f"Initialized RAG pipeline: project={PROJECT_ID}, location={LOCATION}")
 
 
 class ValidationError(Exception):
@@ -179,17 +204,80 @@ def evidence_v2(request: Request):
 
         text = data.get('text', '')
 
-        # Build dummy response
-        # TODO: Integrate with BigQuery for paper retrieval
-        # TODO: Integrate with Vertex AI for semantic search
+        # =================================================================
+        # RAG Pipeline: Generate embedding and search BigQuery
+        # =================================================================
+
+        logger.info(f"Generating embedding for text ({len(text)} chars)...")
+
+        # Step 1: Generate embedding for the input text
+        try:
+            embedding_response = embedding_model.get_embeddings(
+                [text],
+                auto_truncate=True,
+                output_dimensionality=768,
+            )
+            query_embedding = embedding_response[0].values
+            logger.info(f"Generated embedding with {len(query_embedding)} dimensions")
+        except Exception as e:
+            logger.error(f"Embedding generation failed: {e}")
+            raise Exception(f"Failed to generate embedding: {str(e)}")
+
+        # Step 2: Build vector search query
+        vector_search_query = f"""
+        SELECT
+            pmid,
+            title,
+            abstract,
+            ML.DISTANCE(embedding, @query_embedding, 'COSINE') AS distance
+        FROM `{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}`
+        WHERE embedding IS NOT NULL
+        ORDER BY distance ASC
+        LIMIT 5
+        """
+
+        # Step 3: Execute BigQuery vector search
+        logger.info("Executing BigQuery vector search...")
+        try:
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ArrayQueryParameter("query_embedding", "FLOAT64", query_embedding)
+                ]
+            )
+
+            query_job = bq_client.query(vector_search_query, job_config=job_config)
+            results = query_job.result()
+
+        except Exception as e:
+            logger.error(f"BigQuery search failed: {e}")
+            # Fall back to empty results if table is empty or query fails
+            results = []
+
+        # Step 4: Transform results to paper format
+        papers = []
+        for row in results:
+            # Convert distance to similarity score (1 - distance for cosine)
+            similarity_score = 1.0 - float(row.distance) if row.distance is not None else 0.0
+
+            papers.append({
+                "pmid": row.pmid,
+                "title": row.title,
+                "abstract": row.abstract,
+                "score": round(similarity_score, 4)
+            })
+
+        logger.info(f"Found {len(papers)} relevant papers")
+
+        # Step 5: Build response
         response_data = {
             "status": "ok",
-            "papers": [],
+            "papers": papers,
             "metadata": {
-                "version": "2.0.0",
+                "version": "2.1.0",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "text_length": len(text),
-                "note": "This is a placeholder response. BigQuery and Vertex AI integration coming soon."
+                "results": len(papers),
+                "mode": "rag",
             }
         }
 

@@ -1,0 +1,16 @@
+# Ignore ingestion scripts (not needed for Cloud Function)
+ingestion/
+
+# Ignore README
+README.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# IDE
+.vscode/
+.idea/

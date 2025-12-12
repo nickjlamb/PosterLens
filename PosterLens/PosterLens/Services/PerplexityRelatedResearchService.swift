@@ -696,3 +696,50 @@ class PerplexityRelatedResearchService {
         }.prefix(8).map { $0 }
     }
 }
+
+// MARK: - RAG Integration (behind FeatureFlags.usePubMedRAG)
+
+extension PerplexityRelatedResearchService {
+
+    /// Find related research using either RAG pipeline or Perplexity, based on feature flag.
+    /// This is the unified entry point for Related Research.
+    /// - Parameters:
+    ///   - scan: The poster scan to find related papers for
+    ///   - skipEnrichment: Skip PubMed enrichment for Perplexity fallback (default: false)
+    /// - Returns: Array of up to 5 citations
+    func findRelatedResearchUnified(from scan: PosterScan, skipEnrichment: Bool = false) async throws -> [Citation] {
+        // 1. Try RAG pipeline if enabled
+        if FeatureFlags.usePubMedRAG {
+            do {
+                let posterText = "\(scan.title) \(scan.summaryPoints.joined(separator: " ")) \(scan.rawText)"
+                let ragResult = try await RAGEvidenceService.shared.fetchEvidence(for: posterText)
+
+                // Convert PaperResult to Citation (basic info from RAG)
+                let basicCitations = ragResult.papers.map { paper in
+                    Citation(
+                        title: paper.title ?? "Untitled Paper",
+                        authors: [],  // Will be enriched by PubMed
+                        journal: nil,  // Will be enriched by PubMed
+                        year: nil,  // Will be enriched by PubMed
+                        doi: nil,
+                        url: paper.pmid != nil ? "https://pubmed.ncbi.nlm.nih.gov/\(paper.pmid!)" : nil,
+                        abstract: paper.abstract,
+                        relevance: paper.score != nil ? "Relevance score: \(String(format: "%.2f", paper.score!))" : nil
+                    )
+                }
+
+                if !basicCitations.isEmpty {
+                    // Enrich with PubMed metadata (authors, journal, year)
+                    let enrichedCitations = await PubMedAPI.enrichCitations(basicCitations)
+                    return Array(enrichedCitations.prefix(5))
+                }
+            } catch {
+                // RAG failed, fall through to Perplexity
+            }
+        }
+
+        // 2. Fallback to existing Perplexity flow
+        let citations = try await findRelatedResearch(from: scan, skipEnrichment: skipEnrichment)
+        return citations
+    }
+}

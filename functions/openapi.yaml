@@ -1,0 +1,65 @@
+swagger: '2.0'
+info:
+  title: PosterLens API
+  description: API Gateway for PosterLens backend services
+  version: '2.0.0'
+schemes:
+  - https
+produces:
+  - application/json
+securityDefinitions:
+  api_key:
+    type: apiKey
+    name: x-api-key
+    in: header
+paths:
+  /v2/evidence:
+    post:
+      summary: Get evidence-based research papers for poster text
+      operationId: getEvidence
+      security:
+        - api_key: []
+      x-google-backend:
+        address: https://evidence-v2-bdxs5ojeva-nw.a.run.app
+        jwt_audience: https://evidence-v2-bdxs5ojeva-nw.a.run.app
+      consumes:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - text
+            properties:
+              text:
+                type: string
+                description: The poster text to analyze
+      responses:
+        '200':
+          description: Successful response
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+              papers:
+                type: array
+                items:
+                  type: object
+              metadata:
+                type: object
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
+    options:
+      summary: CORS preflight
+      operationId: corsEvidence
+      x-google-backend:
+        address: https://evidence-v2-bdxs5ojeva-nw.a.run.app
+        jwt_audience: https://evidence-v2-bdxs5ojeva-nw.a.run.app
+      responses:
+        '204':
+          description: CORS preflight response

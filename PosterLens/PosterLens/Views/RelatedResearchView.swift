@@ -168,20 +168,20 @@ struct RelatedResearchView: View {
             await advanceStepIndicator()
             
             do {
-                // Use the async version of findRelatedResearch
-                // NEW STRATEGY: Enable PubMed enrichment to get REAL metadata
-                // We now extract PMIDs/DOIs from URLs, so enrichment is faster and accurate
-                let papers = try await relatedResearchService.findRelatedResearch(from: posterScan, skipEnrichment: false)
+                // Use the unified method that routes through RAG or Perplexity based on FeatureFlags
+                // RAG pipeline: BigQuery + Vertex AI embeddings (when enabled)
+                // Perplexity fallback: Search API with PubMed enrichment
+                let papers = try await relatedResearchService.findRelatedResearchUnified(from: posterScan, skipEnrichment: false)
                 
                 await MainActor.run {
                     // Ensure the animation completes
                     searchStepIndex = 4
-                    
+
                     // Delay to ensure the final step is visible for sufficient time
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                         isSearching = false
                         relatedPapers = papers
-                        
+
                         // Save the papers to the poster's research context
                         savePapersToContext(papers)
                         
@@ -338,21 +338,26 @@ struct PaperCardView: View {
             VStack(alignment: .leading, spacing: 12) {
                 if isExpanded {
                     // Abstract
-                    if let abstract = paper.abstract {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Abstract")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                            
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Abstract")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+
+                        if let abstract = paper.abstract, !abstract.isEmpty {
                             Text(abstract)
                                 .font(.subheadline)
                                 .foregroundColor(.primary.opacity(0.8))
                                 .lineSpacing(4)
+                        } else {
+                            Text("No abstract available.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .italic()
                         }
-                        .padding(.vertical, 4)
                     }
-                    
+                    .padding(.vertical, 4)
+
                     // Relevance
                     if let relevance = paper.relevance {
                         VStack(alignment: .leading, spacing: 4) {
@@ -614,7 +619,11 @@ struct SearchingAnimationView: View {
     @Binding var animationValue: Double
     @Binding var dotOpacities: [Double]
     let searchStepIndex: Int
-    
+
+    private var isRAGEnabled: Bool {
+        FeatureFlags.usePubMedRAG
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             // Animated search graphic
@@ -623,7 +632,7 @@ struct SearchingAnimationView: View {
                 Circle()
                     .stroke(Color.green.opacity(0.2), lineWidth: 8)
                     .frame(width: 120, height: 120)
-                
+
                 // Animated arc
                 Circle()
                     .trim(from: 0, to: 0.7)
@@ -642,35 +651,37 @@ struct SearchingAnimationView: View {
                             animationValue = 360
                         }
                     }
-                
-                // Magnifying glass icon
-                Image(systemName: "doc.text.magnifyingglass")
+
+                // Icon - different for RAG vs Perplexity
+                Image(systemName: isRAGEnabled ? "brain.head.profile" : "doc.text.magnifyingglass")
                     .font(.system(size: 36))
                     .foregroundColor(.green)
             }
             .padding(.bottom, 10)
-            
-            Text("Searching Academic Literature")
+
+            Text(isRAGEnabled ? "Finding Related Research" : "Searching Academic Literature")
                 .font(.title3)
                 .fontWeight(.bold)
                 .foregroundColor(.primary)
-            
+
             // Animated ellipsis for "Searching" text
             AnimatedDotsView(dotOpacities: $dotOpacities)
                 .padding(.bottom, 20)
-            
-            // Multi-step indicator
-            StepIndicatorView(searchStepIndex: searchStepIndex)
+
+            // Multi-step indicator - different steps for RAG vs Perplexity
+            StepIndicatorView(searchStepIndex: searchStepIndex, isRAGMode: isRAGEnabled)
                 .padding(.horizontal, 32)
-            
-            Text("Finding the most relevant papers from PubMed, arXiv, and academic journals")
+
+            Text(isRAGEnabled
+                 ? "Using AI to find semantically similar papers from PubMed"
+                 : "Finding the most relevant papers from PubMed, arXiv, and academic journals")
                 .multilineTextAlignment(.center)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 32)
                 .padding(.top, 16)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 400) // Fixed minimum height to prevent layout shifts
         .padding(.vertical, 30)
     }
 }
@@ -678,7 +689,7 @@ struct SearchingAnimationView: View {
 // Further breaking down into smaller components
 struct AnimatedDotsView: View {
     @Binding var dotOpacities: [Double]
-    
+
     var body: some View {
         HStack(spacing: 4) {
             ForEach(0..<3) { index in
@@ -699,19 +710,30 @@ struct AnimatedDotsView: View {
                     }
             }
         }
+        .frame(height: 8) // Fixed height to prevent layout shifts
     }
 }
 
 // Step indicator component
 struct StepIndicatorView: View {
     let searchStepIndex: Int
-    
+    var isRAGMode: Bool = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            stepRow(number: 1, text: "Searching 14 academic databases", isActive: true)
-            stepRow(number: 2, text: "Extracting paper URLs & metadata", isActive: searchStepIndex >= 2)
-            stepRow(number: 3, text: "Validating with PubMed", isActive: searchStepIndex >= 3)
-            stepRow(number: 4, text: "Finalizing citations", isActive: searchStepIndex >= 4)
+            if isRAGMode {
+                // RAG pipeline steps
+                stepRow(number: 1, text: "Analyzing poster content", isActive: true)
+                stepRow(number: 2, text: "Searching PubMed database", isActive: searchStepIndex >= 2)
+                stepRow(number: 3, text: "Enriching paper metadata", isActive: searchStepIndex >= 3)
+                stepRow(number: 4, text: "Preparing results", isActive: searchStepIndex >= 4)
+            } else {
+                // Perplexity fallback steps
+                stepRow(number: 1, text: "Searching 14 academic databases", isActive: true)
+                stepRow(number: 2, text: "Extracting paper URLs & metadata", isActive: searchStepIndex >= 2)
+                stepRow(number: 3, text: "Validating with PubMed", isActive: searchStepIndex >= 3)
+                stepRow(number: 4, text: "Finalizing citations", isActive: searchStepIndex >= 4)
+            }
         }
     }
     

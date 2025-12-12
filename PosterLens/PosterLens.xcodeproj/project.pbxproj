@@ -22,6 +22,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Secrets.plist,
 			);
 			target = BADFE75C2DB3F24700872363 /* PosterLens */;
 		};
