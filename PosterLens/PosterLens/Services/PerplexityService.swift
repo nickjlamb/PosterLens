@@ -1252,7 +1252,8 @@ extension PerplexityService {
                     title: $0.title,
                     abstract: $0.abstract,
                     pmid: nil,
-                    score: nil
+                    score: nil,
+                    whyRelevant: nil
                 )
             }
         } catch {

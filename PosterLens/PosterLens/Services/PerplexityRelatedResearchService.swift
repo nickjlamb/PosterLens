@@ -724,7 +724,7 @@ extension PerplexityRelatedResearchService {
                         doi: nil,
                         url: paper.pmid != nil ? "https://pubmed.ncbi.nlm.nih.gov/\(paper.pmid!)" : nil,
                         abstract: paper.abstract,
-                        relevance: paper.score != nil ? "Relevance score: \(String(format: "%.2f", paper.score!))" : nil
+                        relevance: paper.whyRelevant  // Human-readable explanation from backend
                     )
                 }
 

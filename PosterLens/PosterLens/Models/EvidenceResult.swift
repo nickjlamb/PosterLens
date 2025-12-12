@@ -3,6 +3,15 @@ struct PaperResult: Decodable {
     let abstract: String?
     let pmid: String?
     let score: Double?
+    let whyRelevant: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title
+        case abstract
+        case pmid
+        case score
+        case whyRelevant = "why_relevant"
+    }
 }
 
 struct EvidenceResult: Decodable {

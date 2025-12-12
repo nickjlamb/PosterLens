@@ -273,7 +273,15 @@ struct PaperCardView: View {
                 }
             }
             .padding(.bottom, 2)
-            
+
+            // Why relevant explanation (from RAG backend)
+            if let relevance = paper.relevance, !relevance.isEmpty {
+                Text(relevance)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 2)
+            }
+
             // Authors and publication info
             HStack(alignment: .top, spacing: 4) {
                 Text(formatAuthors(paper.authors))
