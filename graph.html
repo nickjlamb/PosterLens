@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PosterLens — Dependency Graph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#08090c;--bg2:#0e1015;--bg3:#14171e;
+  --border:#1c2130;--border2:#262d3e;
+  --text:#cdd6e4;--text2:#8694a8;--text3:#4e5b6e;
+  --accent:#ff6b35;
+  --blue:#5ba0f5;--green:#3ecf8e;--purple:#a78bfa;--cyan:#56d4dd;--pink:#f472b6;--yellow:#fbbf24;--red:#ef4444;
+  --font-mono:'JetBrains Mono',monospace;--font-sans:'DM Sans',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font-sans);overflow:hidden;height:100vh}
+::selection{background:var(--accent);color:#fff}
+.header{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:rgba(8,9,12,0.9);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:.75rem 2rem;display:flex;align-items:center;gap:1.5rem;
+}
+.header .logo{font-family:var(--font-mono);font-weight:600;font-size:1.1rem;color:var(--accent)}
+.header .logo span{color:var(--text3);font-weight:300}
+.header nav{display:flex;gap:1rem;margin-left:auto;font-size:.85rem}
+.header nav a{color:var(--text2);padding:.35rem .7rem;border-radius:6px;transition:all .2s;text-decoration:none}
+.header nav a:hover,.header nav a.active{color:var(--text);background:var(--bg3)}
+.canvas-wrap{position:fixed;top:52px;left:0;right:0;bottom:0;overflow:hidden;cursor:grab}
+.canvas-wrap.dragging{cursor:grabbing}
+svg{width:100%;height:100%}
+.node{cursor:pointer;transition:opacity .3s}
+.node rect{rx:10;ry:10;stroke-width:1.5;transition:all .25s}
+.node text{font-family:var(--font-mono);pointer-events:none}
+.node .label{font-size:10.5px;fill:var(--text)}
+.node .sublabel{font-size:8.5px;fill:var(--text3)}
+.node:hover rect{filter:brightness(1.3);stroke-width:2}
+.edge{transition:opacity .3s}
+.edge path{stroke-width:1.2;fill:none}
+svg.highlighting .node.dim{opacity:0.1}
+svg.highlighting .edge.dim{opacity:0.04}
+svg.highlighting .node.highlight rect{filter:brightness(1.4);stroke-width:2.5}
+svg.highlighting .edge.highlight path{stroke-width:2.5;stroke-opacity:1}
+.legend{
+  position:fixed;bottom:1.5rem;left:1.5rem;z-index:50;
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:1rem 1.25rem;font-size:.75rem;display:flex;flex-direction:column;gap:.4rem;
+}
+.legend-item{display:flex;align-items:center;gap:.5rem;font-family:var(--font-mono)}
+.legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.info-panel{
+  position:fixed;top:72px;right:1.5rem;z-index:50;
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:1.25rem;width:300px;font-size:.82rem;
+  opacity:0;pointer-events:none;transition:all .3s;transform:translateY(-8px);
+}
+.info-panel.visible{opacity:1;pointer-events:auto;transform:translateY(0)}
+.info-panel h3{font-family:var(--font-mono);font-size:.88rem;margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+.info-panel .info-type{font-size:.6rem;padding:.15rem .4rem;border-radius:3px;text-transform:uppercase;letter-spacing:.04em}
+.info-panel p{color:var(--text2);line-height:1.5;margin-bottom:.5rem}
+.info-panel .info-deps{font-family:var(--font-mono);font-size:.7rem;color:var(--text3)}
+.info-panel .info-deps span{color:var(--text2)}
+.info-panel .info-lines{font-family:var(--font-mono);font-size:.7rem;color:var(--text3);margin-top:.25rem}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="logo">PosterLens <span>wiki</span></div>
+  <nav>
+    <a href="index.html">Overview</a>
+    <a href="graph.html" class="active">Dependency Graph</a>
+  </nav>
+</header>
+<div class="canvas-wrap" id="canvasWrap">
+<svg id="graph" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+<div class="legend">
+  <div style="font-size:.6rem;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.2rem">Legend</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Entry / App</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> On-device (Vision)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> OpenAI</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div> Perplexity</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> PubMed</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div> Cloud / RAG</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--pink)"></div> Models</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8694a8"></div> Views / Utilities</div>
+  <div style="font-size:.6rem;color:var(--text3);margin-top:.4rem">Hover a node to trace dependencies</div>
+</div>
+<div class="info-panel" id="infoPanel">
+  <h3 id="infoTitle"></h3>
+  <p id="infoDesc"></p>
+  <div class="info-deps" id="infoDeps"></div>
+  <div class="info-lines" id="infoLines"></div>
+</div>
+
+<script>
+const nodes = [
+  // Row 0 — App entry
+  {id:'app',x:480,y:40,w:180,h:40,label:'PosterLensApp',sub:'SwiftUI App Entry',type:'entry',lines:0,
+   desc:'App entry point. Launches ContentView with DataStore environment object.'},
+
+  // Row 1 — Key views
+  {id:'content',x:200,y:120,w:140,h:36,label:'ContentView',sub:'Tab navigation',type:'view',lines:96,
+   desc:'Root tab view — Camera, History, About tabs.'},
+  {id:'camera',x:380,y:120,w:140,h:36,label:'CameraView',sub:'Poster capture',type:'view',lines:846,
+   desc:'Live camera preview with scanning UI, guidelines, and capture button.'},
+  {id:'summary',x:560,y:120,w:140,h:36,label:'SummaryView',sub:'AI summary',type:'view',lines:304,
+   desc:'Displays structured 4-point summary with category tags.'},
+  {id:'research',x:740,y:120,w:160,h:36,label:'RelatedResearchView',sub:'Citations',type:'view',lines:789,
+   desc:'Citation cards with PubMed links, validation badges, and enrichment status.'},
+  {id:'chat',x:60,y:120,w:140,h:36,label:'SimpleChatView',sub:'Poster Q&A',type:'view',lines:402,
+   desc:'Context-aware chat about poster content with conversation history.'},
+
+  // Row 2 — Services (pipeline stages)
+  {id:'ocr',x:100,y:240,w:150,h:40,label:'OCRService',sub:'Apple Vision',type:'vision',lines:207,
+   desc:'On-device text extraction. VNRecognizeTextRequest with .accurate level. Handles orientation.'},
+  {id:'openai',x:290,y:240,w:160,h:40,label:'OpenAIService',sub:'GPT-3.5-turbo',type:'openai',lines:358,
+   desc:'Structured summarization (4 points), author question generation. Temperature 0.3.'},
+  {id:'perplexity',x:490,y:240,w:170,h:40,label:'PerplexityService',sub:'sonar model',type:'perplexity',lines:1278,
+   desc:'Core Perplexity client. Powers chat, summarization, author questions. Singleton with context cache.'},
+  {id:'perplexity_research',x:700,y:240,w:220,h:40,label:'PerplexityRelatedResearch',sub:'Search API + domain filter',type:'perplexity',lines:745,
+   desc:'Search API with 14 academic domain filters. Returns real citations with URLs.'},
+
+  // Row 3 — Validation + Support services
+  {id:'pubmed',x:170,y:340,w:150,h:40,label:'PubMedAPI',sub:'E-Utilities',type:'pubmed',lines:558,
+   desc:'esearch, esummary, efetch. Validates citations: extracts PMID, fetches metadata, title similarity >70%.'},
+  {id:'category',x:370,y:340,w:190,h:40,label:'CategoryExtraction',sub:'OpenAI-powered',type:'openai',lines:121,
+   desc:'Extracts research categories via OpenAI. Cancer types (red), focus (purple), phases (green), treatment (blue).'},
+  {id:'chatservice',x:600,y:340,w:150,h:40,label:'ChatService',sub:'Context cache',type:'perplexity',lines:209,
+   desc:'Routes to Perplexity with per-poster context caching and conversation history.'},
+  {id:'rag',x:800,y:340,w:170,h:40,label:'RAGEvidenceService',sub:'Cloud Functions',type:'rag',lines:52,
+   desc:'Evidence V2 endpoint client. Calls GCP Cloud Function for vector search + re-ranking.'},
+
+  // Row 4 — Models
+  {id:'posterscan',x:100,y:450,w:150,h:36,label:'PosterScan',sub:'Core entity',type:'model',lines:118,
+   desc:'Scanned poster: id, title, rawText, summaryPoints[], categories[], image, authorQuestions.'},
+  {id:'citation',x:280,y:450,w:140,h:36,label:'Citation',sub:'Academic ref',type:'model',lines:247,
+   desc:'Title, authors[], journal, year, doi, pmid, url. With Vancouver formatting extensions.'},
+  {id:'datastore',x:450,y:450,w:140,h:36,label:'DataStore',sub:'Persistence',type:'model',lines:406,
+   desc:'JSON encode/decode, image file management, scan history.'},
+  {id:'cameravm',x:620,y:450,w:160,h:36,label:'CameraViewModel',sub:'AVFoundation',type:'model',lines:146,
+   desc:'Camera session management, permissions, capture state.'},
+  {id:'postercategory',x:810,y:450,w:155,h:36,label:'PosterCategory',sub:'Classification',type:'model',lines:110,
+   desc:'Research category with type enum, colour, icon.'},
+
+  // Row 5 — Utilities
+  {id:'network',x:150,y:545,w:175,h:36,label:'NetworkErrorHandler',sub:'Retry + backoff',type:'util',lines:466,
+   desc:'3 retries, exponential backoff (1s/2s/4s), safe JSON parsing, user-friendly error messages.'},
+  {id:'citenhance',x:370,y:545,w:160,h:36,label:'CitationEnhancer',sub:'PubMed enrichment',type:'util',lines:321,
+   desc:'Enhances Perplexity citations with verified PubMed metadata.'},
+  {id:'secrets',x:570,y:545,w:150,h:36,label:'SecretManager',sub:'Secrets.plist',type:'util',lines:55,
+   desc:'Loads API keys from Secrets.plist (gitignored).'},
+  {id:'design',x:760,y:545,w:150,h:36,label:'DesignSystem',sub:'UI constants',type:'util',lines:147,
+   desc:'Colours, spacing, typography, animation constants.'},
+
+  // Row 6 — External APIs
+  {id:'api_vision',x:50,y:640,w:140,h:36,label:'Apple Vision',sub:'On-device ML',type:'ext_vision',lines:0,
+   desc:'iOS Vision framework. VNRecognizeTextRequest — no network, no cost.'},
+  {id:'api_openai',x:220,y:640,w:140,h:36,label:'OpenAI API',sub:'gpt-3.5-turbo',type:'ext_openai',lines:0,
+   desc:'Chat completions endpoint. ~$0.0015/request.'},
+  {id:'api_perplexity',x:390,y:640,w:160,h:36,label:'Perplexity API',sub:'sonar + search',type:'ext_perplexity',lines:0,
+   desc:'Search API with domain filtering + chat completions. ~$0.005/search.'},
+  {id:'api_pubmed',x:580,y:640,w:150,h:36,label:'PubMed / NCBI',sub:'E-Utilities',type:'ext_pubmed',lines:0,
+   desc:'Free. esearch, esummary, efetch. 3 req/sec without API key.'},
+  {id:'api_gcp',x:760,y:640,w:180,h:36,label:'GCP Cloud Functions',sub:'BigQuery + Vertex AI',type:'ext_rag',lines:0,
+   desc:'Evidence V2 endpoint. Vector search + embeddings + re-ranking.'},
+];
+
+const edges = [
+  // App → views
+  {from:'app',to:'content'},{from:'app',to:'camera'},{from:'app',to:'summary'},
+  {from:'app',to:'research'},{from:'app',to:'chat'},
+
+  // Views → services
+  {from:'camera',to:'ocr'},{from:'camera',to:'cameravm'},
+  {from:'summary',to:'openai'},{from:'summary',to:'category'},
+  {from:'research',to:'perplexity_research'},{from:'research',to:'pubmed'},
+  {from:'chat',to:'chatservice'},
+
+  // Services → services
+  {from:'chatservice',to:'perplexity'},
+  {from:'category',to:'openai'},
+  {from:'perplexity_research',to:'perplexity'},
+  {from:'perplexity_research',to:'pubmed'},
+
+  // Services → models
+  {from:'ocr',to:'posterscan'},{from:'openai',to:'posterscan'},
+  {from:'perplexity',to:'posterscan'},{from:'pubmed',to:'citation'},
+  {from:'perplexity_research',to:'citation'},{from:'category',to:'postercategory'},
+
+  // Models → datastore
+  {from:'posterscan',to:'datastore'},{from:'citation',to:'datastore'},
+
+  // Services → utilities
+  {from:'openai',to:'network'},{from:'perplexity',to:'network'},
+  {from:'pubmed',to:'network'},{from:'rag',to:'network'},
+  {from:'openai',to:'secrets'},{from:'perplexity',to:'secrets'},
+  {from:'pubmed',to:'citenhance'},
+
+  // Services → external
+  {from:'ocr',to:'api_vision'},
+  {from:'openai',to:'api_openai'},
+  {from:'perplexity',to:'api_perplexity'},
+  {from:'perplexity_research',to:'api_perplexity'},
+  {from:'pubmed',to:'api_pubmed'},
+  {from:'rag',to:'api_gcp'},
+];
+
+const nodeMap = {};
+nodes.forEach(n => nodeMap[n.id] = n);
+const adj = {};
+nodes.forEach(n => adj[n.id] = new Set());
+edges.forEach(e => { adj[e.from].add(e.to); adj[e.to].add(e.from); });
+
+function getConnected(id) {
+  const visited = new Set([id]);
+  const queue = [id];
+  let depth = 0, levelSize = 1;
+  while (queue.length && depth < 3) {
+    const cur = queue.shift();
+    for (const nb of adj[cur]) { if (!visited.has(nb)) { visited.add(nb); queue.push(nb); } }
+    if (--levelSize === 0) { depth++; levelSize = queue.length; }
+  }
+  return visited;
+}
+
+const svg = document.getElementById('graph');
+const svgNS = 'http://www.w3.org/2000/svg';
+svg.setAttribute('viewBox', '0 0 1020 700');
+
+const typeColors = {
+  entry:{fill:'rgba(255,107,53,0.1)',stroke:'rgba(255,107,53,0.5)',text:'var(--accent)'},
+  vision:{fill:'rgba(62,207,142,0.08)',stroke:'rgba(62,207,142,0.35)',text:'var(--green)'},
+  openai:{fill:'rgba(167,139,250,0.08)',stroke:'rgba(167,139,250,0.35)',text:'var(--purple)'},
+  perplexity:{fill:'rgba(86,212,221,0.08)',stroke:'rgba(86,212,221,0.35)',text:'var(--cyan)'},
+  pubmed:{fill:'rgba(91,160,245,0.08)',stroke:'rgba(91,160,245,0.35)',text:'var(--blue)'},
+  rag:{fill:'rgba(251,191,36,0.08)',stroke:'rgba(251,191,36,0.35)',text:'var(--yellow)'},
+  model:{fill:'rgba(244,114,182,0.08)',stroke:'rgba(244,114,182,0.35)',text:'var(--pink)'},
+  view:{fill:'rgba(134,148,168,0.06)',stroke:'rgba(134,148,168,0.25)',text:'#8694a8'},
+  util:{fill:'rgba(134,148,168,0.06)',stroke:'rgba(134,148,168,0.25)',text:'#8694a8'},
+  ext_vision:{fill:'rgba(62,207,142,0.06)',stroke:'rgba(62,207,142,0.25)',text:'var(--green)'},
+  ext_openai:{fill:'rgba(167,139,250,0.06)',stroke:'rgba(167,139,250,0.25)',text:'var(--purple)'},
+  ext_perplexity:{fill:'rgba(86,212,221,0.06)',stroke:'rgba(86,212,221,0.25)',text:'var(--cyan)'},
+  ext_pubmed:{fill:'rgba(91,160,245,0.06)',stroke:'rgba(91,160,245,0.25)',text:'var(--blue)'},
+  ext_rag:{fill:'rgba(251,191,36,0.06)',stroke:'rgba(251,191,36,0.25)',text:'var(--yellow)'},
+};
+
+function edgeColor(from, to) {
+  const t = nodeMap[to].type;
+  if (t.startsWith('ext_')) return typeColors[t].stroke;
+  if (t==='vision') return 'var(--green)';
+  if (t==='openai') return 'var(--purple)';
+  if (t==='perplexity') return 'var(--cyan)';
+  if (t==='pubmed') return 'var(--blue)';
+  if (t==='rag') return 'var(--yellow)';
+  if (t==='model') return 'var(--pink)';
+  return 'var(--text3)';
+}
+
+// Draw edges
+const edgeEls = [];
+const edgesG = document.createElementNS(svgNS,'g');
+edges.forEach(e => {
+  const f = nodeMap[e.from], t = nodeMap[e.to];
+  const x1 = f.x+f.w/2, y1 = f.y+f.h, x2 = t.x+t.w/2, y2 = t.y;
+  const midY = (y1+y2)/2;
+  const g = document.createElementNS(svgNS,'g');
+  g.classList.add('edge');
+  const path = document.createElementNS(svgNS,'path');
+  path.setAttribute('d',`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
+  path.setAttribute('stroke', edgeColor(e.from, e.to));
+  path.setAttribute('stroke-opacity','0.25');
+  g.appendChild(path);
+  edgesG.appendChild(g);
+  edgeEls.push({el:g, from:e.from, to:e.to});
+});
+svg.appendChild(edgesG);
+
+// Draw nodes
+const nodeEls = [];
+const nodesG = document.createElementNS(svgNS,'g');
+nodes.forEach(n => {
+  const tc = typeColors[n.type] || typeColors.util;
+  const g = document.createElementNS(svgNS,'g');
+  g.classList.add('node');
+  g.dataset.id = n.id;
+  const rect = document.createElementNS(svgNS,'rect');
+  rect.setAttribute('x',n.x);rect.setAttribute('y',n.y);
+  rect.setAttribute('width',n.w);rect.setAttribute('height',n.h);
+  rect.setAttribute('fill',tc.fill);rect.setAttribute('stroke',tc.stroke);
+  g.appendChild(rect);
+  const text = document.createElementNS(svgNS,'text');
+  text.setAttribute('x',n.x+n.w/2);text.setAttribute('y',n.y+n.h/2-(n.sub?2:0));
+  text.setAttribute('text-anchor','middle');text.setAttribute('dominant-baseline','middle');
+  text.classList.add('label');text.setAttribute('fill',tc.text);
+  text.textContent = n.label;
+  g.appendChild(text);
+  if (n.sub) {
+    const sub = document.createElementNS(svgNS,'text');
+    sub.setAttribute('x',n.x+n.w/2);sub.setAttribute('y',n.y+n.h/2+11);
+    sub.setAttribute('text-anchor','middle');sub.setAttribute('dominant-baseline','middle');
+    sub.classList.add('sublabel');sub.textContent=n.sub;
+    g.appendChild(sub);
+  }
+  nodesG.appendChild(g);
+  nodeEls.push({el:g, id:n.id});
+});
+svg.appendChild(nodesG);
+
+// Info panel
+const infoPanel = document.getElementById('infoPanel');
+const infoTitle = document.getElementById('infoTitle');
+const infoDesc = document.getElementById('infoDesc');
+const infoDeps = document.getElementById('infoDeps');
+const infoLines = document.getElementById('infoLines');
+
+const typeLabels = {entry:'App',vision:'Vision',openai:'OpenAI',perplexity:'Perplexity',pubmed:'PubMed',rag:'RAG',model:'Model',view:'View',util:'Utility',ext_vision:'External',ext_openai:'External',ext_perplexity:'External',ext_pubmed:'External',ext_rag:'External'};
+
+function showInfo(n) {
+  const tc = typeColors[n.type]||typeColors.util;
+  infoTitle.innerHTML = `${n.label} <span class="info-type" style="background:${tc.fill};color:${tc.text}">${typeLabels[n.type]}</span>`;
+  infoDesc.textContent = n.desc;
+  const deps = [...adj[n.id]].map(id => nodeMap[id].label).join(', ');
+  infoDeps.innerHTML = deps ? `Connected to: <span>${deps}</span>` : '';
+  infoLines.textContent = n.lines ? `${n.lines} lines` : '';
+  infoPanel.classList.add('visible');
+}
+
+let activeNode = null;
+nodesG.addEventListener('mouseover', e => {
+  const g = e.target.closest('.node'); if (!g) return;
+  const id = g.dataset.id; if (activeNode===id) return;
+  activeNode = id;
+  const connected = getConnected(id);
+  svg.classList.add('highlighting');
+  nodeEls.forEach(({el,id:nid}) => { el.classList.toggle('highlight',connected.has(nid)); el.classList.toggle('dim',!connected.has(nid)); });
+  edgeEls.forEach(({el,from,to}) => { const on=connected.has(from)&&connected.has(to); el.classList.toggle('highlight',on); el.classList.toggle('dim',!on); });
+  showInfo(nodeMap[id]);
+});
+nodesG.addEventListener('mouseout', e => {
+  if (e.relatedTarget?.closest?.('.node')) return;
+  activeNode=null;
+  svg.classList.remove('highlighting');
+  nodeEls.forEach(({el})=>{el.classList.remove('highlight','dim')});
+  edgeEls.forEach(({el})=>{el.classList.remove('highlight','dim')});
+  infoPanel.classList.remove('visible');
+});
+
+// Pan + zoom
+const wrap = document.getElementById('canvasWrap');
+let isPanning=false,panStart={x:0,y:0},vb={x:0,y:0,w:1020,h:700};
+function updateVB(){svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`)}
+wrap.addEventListener('mousedown',e=>{if(e.target.closest('.node'))return;isPanning=true;panStart={x:e.clientX,y:e.clientY};wrap.classList.add('dragging')});
+window.addEventListener('mousemove',e=>{if(!isPanning)return;const dx=(e.clientX-panStart.x)*(vb.w/wrap.clientWidth),dy=(e.clientY-panStart.y)*(vb.h/wrap.clientHeight);vb.x-=dx;vb.y-=dy;panStart={x:e.clientX,y:e.clientY};updateVB()});
+window.addEventListener('mouseup',()=>{isPanning=false;wrap.classList.remove('dragging')});
+wrap.addEventListener('wheel',e=>{e.preventDefault();const s=e.deltaY>0?1.08:.93,r=wrap.getBoundingClientRect(),mx=(e.clientX-r.left)/r.width,my=(e.clientY-r.top)/r.height;const nw=vb.w*s,nh=vb.h*s;vb.x+=(vb.w-nw)*mx;vb.y+=(vb.h-nh)*my;vb.w=nw;vb.h=nh;updateVB()},{passive:false});
+</script>
+</body>
+</html>

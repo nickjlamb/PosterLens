@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PosterLens — Code Wiki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#08090c;--bg2:#0e1015;--bg3:#14171e;--bg4:#1a1e28;
+  --border:#1c2130;--border2:#262d3e;
+  --text:#cdd6e4;--text2:#8694a8;--text3:#4e5b6e;
+  --accent:#ff6b35;--accent2:#e85d2c;--accent-dim:rgba(255,107,53,0.08);
+  --blue:#5ba0f5;--green:#3ecf8e;--purple:#a78bfa;--cyan:#56d4dd;--pink:#f472b6;--yellow:#fbbf24;
+  --red:#ef4444;
+  --font-mono:'JetBrains Mono',monospace;
+  --font-sans:'DM Sans',sans-serif;
+  --font-serif:'Instrument Serif',serif;
+}
+html{font-size:15px;scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--font-sans);line-height:1.6;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none;transition:color .2s}
+a:hover{color:var(--accent2)}
+::selection{background:var(--accent);color:#fff}
+
+/* HEADER */
+.header{
+  position:sticky;top:0;z-index:100;
+  background:rgba(8,9,12,0.88);backdrop-filter:blur(20px) saturate(1.4);
+  border-bottom:1px solid var(--border);
+  padding:.75rem 2rem;display:flex;align-items:center;gap:1.5rem;
+}
+.header .logo{font-family:var(--font-mono);font-weight:600;font-size:1.1rem;color:var(--accent);letter-spacing:-.02em}
+.header .logo span{color:var(--text3);font-weight:300}
+.header .perplexity-badge{
+  font-family:var(--font-mono);font-size:.65rem;padding:.25rem .6rem;
+  background:rgba(86,212,221,0.08);border:1px solid rgba(86,212,221,0.25);
+  color:var(--cyan);border-radius:4px;letter-spacing:.03em;
+}
+.header nav{display:flex;gap:1rem;margin-left:auto;font-size:.85rem}
+.header nav a{color:var(--text2);padding:.35rem .7rem;border-radius:6px;transition:all .2s;text-decoration:none}
+.header nav a:hover,.header nav a.active{color:var(--text);background:var(--bg3)}
+
+/* HERO */
+.hero{
+  padding:4rem 2rem 3rem;max-width:1200px;margin:0 auto;
+  display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center;
+}
+.hero-text h1{font-family:var(--font-serif);font-size:3rem;line-height:1.1;color:#fff;margin-bottom:1rem;font-weight:400}
+.hero-text h1 em{color:var(--accent);font-style:italic}
+.hero-text p{color:var(--text2);font-size:1.05rem;max-width:520px;margin-bottom:1.5rem}
+.hero-meta{display:flex;flex-wrap:wrap;gap:.75rem;font-family:var(--font-mono);font-size:.72rem;color:var(--text3)}
+.hero-meta .tag{padding:.25rem .55rem;background:var(--bg3);border:1px solid var(--border);border-radius:4px}
+.hero-meta .tag.featured{background:rgba(86,212,221,0.06);border-color:rgba(86,212,221,0.2);color:var(--cyan)}
+.hero-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem}
+.stat-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.4rem;transition:all .3s;
+}
+.stat-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 30px rgba(255,107,53,0.05)}
+.stat-card .num{font-family:var(--font-mono);font-size:1.9rem;font-weight:600;color:#fff}
+.stat-card .label{font-size:.78rem;color:var(--text3);margin-top:.2rem}
+
+/* SECTIONS */
+.section{max-width:1200px;margin:0 auto;padding:3rem 2rem}
+.section-title{
+  font-family:var(--font-serif);font-size:1.8rem;color:#fff;margin-bottom:.4rem;font-weight:400;
+  display:flex;align-items:center;gap:.75rem;
+}
+.section-title::before{content:'';width:3px;height:1.5rem;background:var(--accent);border-radius:2px}
+.section-sub{color:var(--text3);font-size:.88rem;margin-bottom:2rem}
+
+/* PIPELINE — the star of the show */
+.pipeline{
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;
+  padding:2.5rem;position:relative;overflow:hidden;
+}
+.pipeline::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.4;
+}
+.pipeline-stages{display:flex;align-items:stretch;gap:0;justify-content:center;flex-wrap:wrap}
+.pipeline-stage{
+  flex:1;min-width:140px;max-width:200px;padding:1.25rem;text-align:center;
+  position:relative;border-radius:12px;transition:all .25s;cursor:default;
+}
+.pipeline-stage:hover{background:var(--bg3)}
+.pipeline-stage .stage-num{
+  font-family:var(--font-mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:.5rem;
+}
+.pipeline-stage .stage-icon{font-size:2rem;margin-bottom:.5rem}
+.pipeline-stage .stage-label{font-family:var(--font-mono);font-size:.8rem;color:#fff;margin-bottom:.2rem}
+.pipeline-stage .stage-detail{font-size:.7rem;color:var(--text3);line-height:1.4}
+.pipeline-stage .stage-cost{
+  font-family:var(--font-mono);font-size:.65rem;margin-top:.5rem;
+  padding:.2rem .5rem;border-radius:3px;display:inline-block;
+}
+.pipeline-stage .stage-cost.free{background:rgba(62,207,142,0.1);color:var(--green)}
+.pipeline-stage .stage-cost.paid{background:rgba(255,107,53,0.08);color:var(--accent)}
+.pipeline-arrow{
+  display:flex;align-items:center;color:var(--text3);font-family:var(--font-mono);font-size:1.2rem;
+  padding:0 .25rem;opacity:.4;
+}
+
+/* FILE TREE */
+.file-tree{
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  font-family:var(--font-mono);font-size:.78rem;overflow:hidden;
+}
+.file-tree-header{
+  padding:.65rem 1.25rem;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:.5rem;color:var(--text2);font-size:.72rem;
+}
+.file-tree-header .circle{width:8px;height:8px;border-radius:50%;display:inline-block}
+.file-tree ul{list-style:none;padding:.4rem 0}
+.file-tree li{padding:.2rem 1.25rem;display:flex;align-items:center;gap:.5rem;cursor:pointer;transition:background .15s;font-size:.75rem}
+.file-tree li:hover{background:var(--bg3)}
+.file-tree li .icon{width:16px;text-align:center;font-size:.65rem;flex-shrink:0}
+.file-tree li .lines{margin-left:auto;color:var(--text3);font-size:.65rem}
+.file-tree .dir{color:var(--blue)}
+.file-tree .indent-1{padding-left:2.5rem}
+.file-tree .indent-2{padding-left:3.75rem}
+
+/* SERVICE CARDS */
+.services-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem}
+.service-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:1.5rem;transition:all .3s;position:relative;overflow:hidden;
+}
+.service-card::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;opacity:0;transition:opacity .3s;
+}
+.service-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.service-card:hover::after{opacity:1}
+.service-card.vision::after{background:var(--green)}
+.service-card.openai::after{background:var(--purple)}
+.service-card.perplexity::after{background:var(--cyan)}
+.service-card.pubmed::after{background:var(--blue)}
+.service-card.rag::after{background:var(--yellow)}
+.service-card.util::after{background:var(--pink)}
+.service-card h3{font-family:var(--font-mono);font-size:.88rem;color:#fff;margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+.service-card h3 .badge{
+  font-size:.58rem;padding:.15rem .4rem;border-radius:3px;text-transform:uppercase;letter-spacing:.04em;font-weight:500;
+}
+.service-card h3 .badge.vision{background:rgba(62,207,142,0.12);color:var(--green)}
+.service-card h3 .badge.openai{background:rgba(167,139,250,0.12);color:var(--purple)}
+.service-card h3 .badge.perplexity{background:rgba(86,212,221,0.12);color:var(--cyan)}
+.service-card h3 .badge.pubmed{background:rgba(91,160,245,0.12);color:var(--blue)}
+.service-card h3 .badge.rag{background:rgba(251,191,36,0.12);color:var(--yellow)}
+.service-card h3 .badge.util{background:rgba(244,114,182,0.12);color:var(--pink)}
+.service-card p{font-size:.82rem;color:var(--text2);line-height:1.5}
+.service-card .source{font-family:var(--font-mono);font-size:.68rem;color:var(--text3);margin-top:.75rem}
+
+/* MODELS TABLE */
+.model-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.model-table th{
+  text-align:left;padding:.55rem 1rem;border-bottom:1px solid var(--border);
+  font-family:var(--font-mono);font-size:.68rem;color:var(--text3);
+  letter-spacing:.05em;text-transform:uppercase;font-weight:500;
+}
+.model-table td{padding:.45rem 1rem;border-bottom:1px solid rgba(28,33,48,0.5);font-family:var(--font-mono)}
+.model-table td:first-child{color:var(--pink)}
+.model-table tr:hover td{background:var(--bg3)}
+
+/* VIEWS GRID */
+.views-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.75rem}
+.view-card{
+  background:var(--bg3);border:1px solid var(--border);border-radius:10px;
+  padding:1rem 1.15rem;transition:all .2s;
+}
+.view-card:hover{border-color:var(--border2)}
+.view-card .view-name{font-family:var(--font-mono);font-size:.78rem;color:#fff;margin-bottom:.25rem}
+.view-card .view-desc{font-size:.72rem;color:var(--text3);line-height:1.4}
+.view-card .view-lines{font-family:var(--font-mono);font-size:.65rem;color:var(--text3);margin-top:.4rem}
+
+/* API CONFIG TABLE */
+.api-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.api-table th{
+  text-align:left;padding:.55rem 1rem;border-bottom:1px solid var(--border);
+  font-family:var(--font-mono);font-size:.68rem;color:var(--text3);
+  letter-spacing:.05em;text-transform:uppercase;font-weight:500;
+}
+.api-table td{padding:.45rem 1rem;border-bottom:1px solid rgba(28,33,48,0.5)}
+.api-table tr:hover td{background:var(--bg3)}
+
+/* COST BREAKDOWN */
+.cost-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.75rem}
+.cost-item{
+  background:var(--bg3);border-radius:8px;padding:.75rem 1rem;font-family:var(--font-mono);font-size:.75rem;
+}
+.cost-item .key{margin-bottom:.25rem}
+.cost-item .val{color:var(--text3)}
+
+/* DEPS */
+.dep-grid{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}
+.dep{
+  padding:.35rem .7rem;border-radius:6px;font-family:var(--font-mono);font-size:.72rem;
+  border:1px solid var(--border);color:var(--text2);transition:all .2s;
+}
+.dep:hover{border-color:var(--accent);color:var(--accent)}
+
+/* DOMAIN BADGES */
+.domain-grid{display:flex;flex-wrap:wrap;gap:.5rem}
+.domain-badge{
+  padding:.3rem .65rem;border-radius:6px;font-family:var(--font-mono);font-size:.68rem;
+  background:rgba(86,212,221,0.06);border:1px solid rgba(86,212,221,0.15);color:var(--cyan);
+}
+
+/* FOOTER */
+.footer{
+  max-width:1200px;margin:4rem auto 0;padding:2rem;
+  border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:.8rem;color:var(--text3);
+}
+.footer a{color:var(--text2)}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .hero{grid-template-columns:1fr;padding:2rem 1rem}
+  .hero-text h1{font-size:2.2rem}
+  .section{padding:2rem 1rem}
+  .services-grid{grid-template-columns:1fr}
+  .pipeline-stages{flex-direction:column;align-items:center}
+  .pipeline-arrow{transform:rotate(90deg)}
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.animate{animation:fadeUp .6s ease both}
+.delay-1{animation-delay:.1s}.delay-2{animation-delay:.2s}.delay-3{animation-delay:.3s}.delay-4{animation-delay:.4s}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">PosterLens <span>wiki</span></div>
+  <span class="perplexity-badge">Featured in Perplexity AI Cookbook</span>
+  <nav>
+    <a href="#overview" class="active">Overview</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#services">Services</a>
+    <a href="#views">Views</a>
+    <a href="#models">Models</a>
+    <a href="graph.html">Dependency Graph ↗</a>
+  </nav>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-text animate">
+    <h1>From poster photo to <em>interactive insight</em></h1>
+    <p>iOS app that transforms scientific posters into structured summaries, interactive chat, and validated research citations — using a 4-stage multi-API pipeline.</p>
+    <div class="hero-meta">
+      <span class="tag">Swift · SwiftUI</span>
+      <span class="tag">MVVM</span>
+      <span class="tag">iOS 16+</span>
+      <span class="tag">MIT</span>
+      <span class="tag featured">Perplexity Cookbook</span>
+      <span class="tag">App Store</span>
+    </div>
+  </div>
+  <div class="hero-stats animate delay-2">
+    <div class="stat-card">
+      <div class="num">~17k</div>
+      <div class="label">Lines of Swift</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">4</div>
+      <div class="label">API Stages</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">11</div>
+      <div class="label">Services</div>
+    </div>
+    <div class="stat-card">
+      <div class="num">23</div>
+      <div class="label">SwiftUI Views</div>
+    </div>
+  </div>
+</section>
+
+<!-- PIPELINE -->
+<section class="section" id="pipeline">
+  <h2 class="section-title">The 4-Stage Pipeline</h2>
+  <p class="section-sub">How a poster photo becomes an interactive research assistant — ~$0.0075 per scan</p>
+  <div class="pipeline animate">
+    <div class="pipeline-stages">
+      <div class="pipeline-stage">
+        <div class="stage-num">Stage 1</div>
+        <div class="stage-icon">📷</div>
+        <div class="stage-label">Capture + OCR</div>
+        <div class="stage-detail">AVFoundation camera → Apple Vision framework on-device text extraction</div>
+        <div class="stage-cost free">FREE</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-stage">
+        <div class="stage-num">Stage 2</div>
+        <div class="stage-icon">🤖</div>
+        <div class="stage-label">AI Summary</div>
+        <div class="stage-detail">OpenAI GPT-3.5-turbo generates structured 4-point summary + author questions</div>
+        <div class="stage-cost paid">~$0.0015</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-stage">
+        <div class="stage-num">Stage 3</div>
+        <div class="stage-icon">🔬</div>
+        <div class="stage-label">Research Discovery</div>
+        <div class="stage-detail">Perplexity Search API with 14 academic domain filters finds 3-5 related papers</div>
+        <div class="stage-cost paid">~$0.005</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-stage">
+        <div class="stage-num">Stage 4</div>
+        <div class="stage-icon">📚</div>
+        <div class="stage-label">Citation Validation</div>
+        <div class="stage-detail">PubMed E-Utilities validates, enriches, and links every citation</div>
+        <div class="stage-cost free">FREE</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-stage">
+        <div class="stage-num">+ Interactive</div>
+        <div class="stage-icon">💬</div>
+        <div class="stage-label">Chat</div>
+        <div class="stage-detail">Context-aware Q&A about the poster via Perplexity with conversation history</div>
+        <div class="stage-cost paid">~$0.001/msg</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cloud RAG pipeline -->
+  <div style="margin-top:1.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.5rem">
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
+      <span style="font-family:var(--font-mono);font-size:.85rem;color:var(--yellow)">☁️ Evidence V2 — RAG Pipeline</span>
+      <span style="font-family:var(--font-mono);font-size:.6rem;padding:.15rem .4rem;background:rgba(251,191,36,0.1);color:var(--yellow);border-radius:3px">IN DEVELOPMENT</span>
+    </div>
+    <p style="font-size:.82rem;color:var(--text2);margin-bottom:.5rem">Cloud Functions backend with BigQuery vector search + Vertex AI embeddings for enhanced paper discovery. Deployed on GCP (europe-west2).</p>
+    <div style="font-family:var(--font-mono);font-size:.72rem;color:var(--text3)">
+      iOS App → Cloud Function (evidenceV2) → BigQuery (pubmed_rag.papers) → Vertex AI (text-embedding-004) → Re-ranked citations
+    </div>
+  </div>
+</section>
+
+<!-- FILE TREE -->
+<section class="section" id="overview">
+  <h2 class="section-title">Repository Structure</h2>
+  <p class="section-sub">iOS app (Swift/SwiftUI) + GCP Cloud Functions (Python)</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+    <div class="file-tree animate">
+      <div class="file-tree-header">
+        <span class="circle" style="background:var(--red)"></span>
+        <span class="circle" style="background:var(--accent)"></span>
+        <span class="circle" style="background:var(--green)"></span>
+        &nbsp; PosterLens/PosterLens/
+      </div>
+      <ul>
+        <li><span class="icon">⚡</span> PosterLensApp.swift <span class="lines">entry</span></li>
+        <li><span class="icon">⚙️</span> Config.swift <span class="lines">API config</span></li>
+        <li class="dir"><span class="icon">📁</span> Services/ <span class="lines">3,819 lines</span></li>
+        <li class="indent-1"><span class="icon">👁</span> OCRService.swift <span class="lines">207</span></li>
+        <li class="indent-1"><span class="icon">🤖</span> OpenAIService.swift <span class="lines">358</span></li>
+        <li class="indent-1"><span class="icon">🔬</span> PerplexityService.swift <span class="lines">1,278</span></li>
+        <li class="indent-1"><span class="icon">🔬</span> PerplexityRelatedResearchService.swift <span class="lines">745</span></li>
+        <li class="indent-1"><span class="icon">📚</span> PubMedAPI.swift <span class="lines">558</span></li>
+        <li class="indent-1"><span class="icon">☁️</span> RAGEvidenceService.swift <span class="lines">52</span></li>
+        <li class="indent-1"><span class="icon">💬</span> ChatService.swift <span class="lines">209</span></li>
+        <li class="indent-1"><span class="icon">🏷</span> CategoryExtractionService.swift <span class="lines">121</span></li>
+        <li class="indent-1"><span class="icon">📄</span> PDFExportService.swift <span class="lines">189</span></li>
+        <li class="indent-1"><span class="icon">🖼</span> ImageOrientationFixer.swift <span class="lines">97</span></li>
+        <li class="indent-1"><span class="icon">🚩</span> FeatureFlags.swift <span class="lines">5</span></li>
+        <li class="dir"><span class="icon">📁</span> Models/ <span class="lines">1,594 lines</span></li>
+        <li class="indent-1"><span class="icon">📋</span> PosterScan.swift <span class="lines">118</span></li>
+        <li class="indent-1"><span class="icon">📷</span> CameraViewModel.swift <span class="lines">146</span></li>
+        <li class="indent-1"><span class="icon">📷</span> CameraOverlayManager.swift <span class="lines">223</span></li>
+        <li class="indent-1"><span class="icon">💬</span> ChatMessage.swift <span class="lines">81</span></li>
+        <li class="indent-1"><span class="icon">📝</span> Citation.swift <span class="lines">166+81</span></li>
+        <li class="indent-1"><span class="icon">💾</span> DataStore.swift <span class="lines">406</span></li>
+        <li class="indent-1"><span class="icon">🏷</span> PosterCategory.swift <span class="lines">110</span></li>
+        <li class="indent-1"><span class="icon">👋</span> OnboardingManager.swift <span class="lines">209</span></li>
+        <li class="dir"><span class="icon">📁</span> Views/ <span class="lines">8,146 lines</span></li>
+        <li class="indent-1"><span class="icon">📱</span> 23 SwiftUI views</li>
+        <li class="dir"><span class="icon">📁</span> Utilities/ <span class="lines">1,379 lines</span></li>
+        <li class="indent-1"><span class="icon">🔧</span> 8 utility modules</li>
+      </ul>
+    </div>
+    <div>
+      <div class="file-tree animate delay-1" style="margin-bottom:1rem">
+        <div class="file-tree-header">☁️ functions/ — GCP Cloud Functions</div>
+        <ul>
+          <li><span class="icon">🐍</span> main.py <span class="lines">769 lines</span></li>
+          <li class="dir"><span class="icon">📁</span> ingestion/</li>
+          <li class="indent-1"><span class="icon">🐍</span> embed_and_load.py <span class="lines">564</span></li>
+          <li class="indent-1"><span class="icon">🐍</span> prepare_pubmed_subset.py <span class="lines">400</span></li>
+          <li class="indent-1"><span class="icon">📊</span> pubmed_subset.jsonl <span class="lines">data</span></li>
+          <li><span class="icon">📄</span> openapi.yaml <span class="lines">API spec</span></li>
+          <li><span class="icon">📄</span> requirements.txt</li>
+        </ul>
+      </div>
+      <div class="file-tree animate delay-2" style="margin-bottom:1rem">
+        <div class="file-tree-header">🧪 Tests — 1,915 lines</div>
+        <ul>
+          <li><span class="icon">✅</span> PubMedParserTests.swift <span class="lines">494</span></li>
+          <li><span class="icon">✅</span> LinkHealthTests.swift <span class="lines">415</span></li>
+          <li><span class="icon">✅</span> QueryBuilderV2Tests.swift <span class="lines">400</span></li>
+          <li><span class="icon">✅</span> VancouverFormatterTests.swift <span class="lines">339</span></li>
+          <li><span class="icon">✅</span> PosterLensTestSuite.swift <span class="lines">186</span></li>
+          <li><span class="icon">✅</span> PerplexityPayloadTests.swift <span class="lines">81</span></li>
+        </ul>
+      </div>
+      <div class="animate delay-3" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.15rem">
+        <div style="font-family:var(--font-mono);font-size:.7rem;color:var(--text3);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.05em">Stack</div>
+        <div class="dep-grid">
+          <div class="dep">Swift 5.7+</div>
+          <div class="dep">SwiftUI</div>
+          <div class="dep">AVFoundation</div>
+          <div class="dep">Vision</div>
+          <div class="dep">PDFKit</div>
+          <div class="dep">Python 3.11</div>
+          <div class="dep">Vertex AI</div>
+          <div class="dep">BigQuery</div>
+          <div class="dep">Cloud Functions</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SERVICES -->
+<section class="section" id="services">
+  <h2 class="section-title">Services Layer</h2>
+  <p class="section-sub">11 services powering the multi-API pipeline — singletons with retry logic and caching</p>
+  <div class="services-grid">
+    <div class="service-card vision animate">
+      <h3>OCRService <span class="badge vision">Vision</span></h3>
+      <p>On-device text extraction using Apple Vision framework. Handles image orientation, preprocessing, and recognition confidence. No API key, no network — pure on-device ML.</p>
+      <div class="source">Services/OCRService.swift · 207 lines</div>
+    </div>
+    <div class="service-card openai animate delay-1">
+      <h3>OpenAIService <span class="badge openai">OpenAI</span></h3>
+      <p>GPT-3.5-turbo integration for structured summarization (4-point format), author question generation, and category extraction. Temperature 0.3 for factual responses.</p>
+      <div class="source">Services/OpenAIService.swift · 358 lines</div>
+    </div>
+    <div class="service-card perplexity animate delay-2">
+      <h3>PerplexityService <span class="badge perplexity">Perplexity</span></h3>
+      <p>Core Perplexity API client (sonar model). Powers chat, summarization, and author question generation. Singleton with context caching per poster ID.</p>
+      <div class="source">Services/PerplexityService.swift · 1,278 lines</div>
+    </div>
+    <div class="service-card perplexity animate delay-3">
+      <h3>PerplexityRelatedResearchService <span class="badge perplexity">Search</span></h3>
+      <p>Perplexity Search API with <code>search_domain_filter</code> restricting to 14 trusted academic domains. Returns real citations with URLs, validated against PubMed.</p>
+      <div class="source">Services/PerplexityRelatedResearchService.swift · 745 lines</div>
+    </div>
+    <div class="service-card pubmed animate">
+      <h3>PubMedAPI <span class="badge pubmed">PubMed</span></h3>
+      <p>NCBI E-Utilities client — esearch, esummary, efetch. Validates Perplexity citations by extracting PMIDs, fetching metadata, comparing title similarity (>70% match).</p>
+      <div class="source">Services/PubMedAPI.swift · 558 lines</div>
+    </div>
+    <div class="service-card rag animate delay-1">
+      <h3>RAGEvidenceService <span class="badge rag">RAG V2</span></h3>
+      <p>Cloud Functions client for the Evidence V2 endpoint. BigQuery vector search + Vertex AI embeddings with deterministic re-ranking (recency, keyword overlap, specificity).</p>
+      <div class="source">Services/RAGEvidenceService.swift · 52 lines + functions/main.py · 769 lines</div>
+    </div>
+    <div class="service-card util animate delay-2">
+      <h3>ChatService <span class="badge util">Chat</span></h3>
+      <p>Conversation management with per-poster context caching. Routes to Perplexity for context-aware Q&A with conversation history.</p>
+      <div class="source">Services/ChatService.swift · 209 lines</div>
+    </div>
+    <div class="service-card util animate delay-3">
+      <h3>CategoryExtractionService <span class="badge openai">OpenAI</span></h3>
+      <p>Extracts research categories from poster text via OpenAI. Colour-coded: Cancer Types (red), Research Focus (purple), Phases (green), Treatment (blue).</p>
+      <div class="source">Services/CategoryExtractionService.swift · 121 lines</div>
+    </div>
+    <div class="service-card util animate">
+      <h3>PDFExportService <span class="badge util">Export</span></h3>
+      <p>Generates A4 PDFs with poster image, structured summary, citations, and categories using UIGraphicsPDFRenderer.</p>
+      <div class="source">Services/PDFExportService.swift · 189 lines</div>
+    </div>
+    <div class="service-card util animate delay-1">
+      <h3>ImageOrientationFixer <span class="badge util">Utility</span></h3>
+      <p>Fixes image orientation by actually rotating pixel data (not just EXIF metadata) via CoreImage transforms.</p>
+      <div class="source">Services/ImageOrientationFixer.swift · 97 lines</div>
+    </div>
+    <div class="service-card util animate delay-2">
+      <h3>NetworkErrorHandler <span class="badge util">Utility</span></h3>
+      <p>Centralised error handling: 3 retries with exponential backoff (1s, 2s, 4s), safe JSON parsing, user-friendly error messages for all API failures.</p>
+      <div class="source">Utilities/NetworkErrorHandler.swift · 466 lines</div>
+    </div>
+  </div>
+</section>
+
+<!-- PERPLEXITY DOMAINS -->
+<section class="section">
+  <h2 class="section-title">Academic Domain Filtering</h2>
+  <p class="section-sub">Perplexity Search API restricted to 14 trusted sources — the key innovation that made it into the Cookbook</p>
+  <div class="domain-grid">
+    <span class="domain-badge">pubmed.ncbi.nlm.nih.gov</span>
+    <span class="domain-badge">pmc.ncbi.nlm.nih.gov</span>
+    <span class="domain-badge">nih.gov</span>
+    <span class="domain-badge">arxiv.org</span>
+    <span class="domain-badge">scholar.google.com</span>
+    <span class="domain-badge">nature.com</span>
+    <span class="domain-badge">science.org</span>
+    <span class="domain-badge">sciencedirect.com</span>
+    <span class="domain-badge">springer.com</span>
+    <span class="domain-badge">wiley.com</span>
+    <span class="domain-badge">cell.com</span>
+    <span class="domain-badge">nejm.org</span>
+    <span class="domain-badge">pnas.org</span>
+    <span class="domain-badge">ieee.org</span>
+  </div>
+</section>
+
+<!-- VIEWS -->
+<section class="section" id="views">
+  <h2 class="section-title">Views</h2>
+  <p class="section-sub">23 SwiftUI views — 8,146 lines total</p>
+  <div class="views-grid">
+    <div class="view-card"><div class="view-name">CameraPreviewViewController</div><div class="view-desc">AVFoundation camera with edge detection overlay</div><div class="view-lines">1,353 lines</div></div>
+    <div class="view-card"><div class="view-name">CameraView</div><div class="view-desc">SwiftUI wrapper with scanning UI and guidelines</div><div class="view-lines">846 lines</div></div>
+    <div class="view-card"><div class="view-name">RelatedResearchView</div><div class="view-desc">Citation cards with PubMed links and validation status</div><div class="view-lines">789 lines</div></div>
+    <div class="view-card"><div class="view-name">HistoryView</div><div class="view-desc">Scan history with category filtering and search</div><div class="view-lines">723 lines</div></div>
+    <div class="view-card"><div class="view-name">AboutView</div><div class="view-desc">App info with PharmaTools branding</div><div class="view-lines">691 lines</div></div>
+    <div class="view-card"><div class="view-name">ButtonRowView</div><div class="view-desc">Action buttons for share, chat, research</div><div class="view-lines">668 lines</div></div>
+    <div class="view-card"><div class="view-name">SimpleChatView</div><div class="view-desc">Poster-specific chat with message history</div><div class="view-lines">402 lines</div></div>
+    <div class="view-card"><div class="view-name">ChatView</div><div class="view-desc">Full chat interface with typing indicators</div><div class="view-lines">407 lines</div></div>
+    <div class="view-card"><div class="view-name">SummaryView</div><div class="view-desc">Structured 4-point AI summary display</div><div class="view-lines">304 lines</div></div>
+    <div class="view-card"><div class="view-name">OpenAIChatView</div><div class="view-desc">Alternative chat powered by OpenAI directly</div><div class="view-lines">309 lines</div></div>
+    <div class="view-card"><div class="view-name">ScanCardView</div><div class="view-desc">Poster scan thumbnail with category tags</div><div class="view-lines">255 lines</div></div>
+    <div class="view-card"><div class="view-name">LiteratureContextView</div><div class="view-desc">Evidence context with RAG results</div><div class="view-lines">215 lines</div></div>
+  </div>
+</section>
+
+<!-- MODELS -->
+<section class="section" id="models">
+  <h2 class="section-title">Data Models</h2>
+  <p class="section-sub">Core entities — 1,594 lines across 12 models</p>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <table class="model-table">
+      <thead><tr><th>Model</th><th>Purpose</th><th>Key Properties</th><th>Lines</th></tr></thead>
+      <tbody>
+        <tr><td>PosterScan</td><td>Core entity — a scanned poster</td><td>id, title, rawText, summaryPoints[], categories[], image</td><td>118</td></tr>
+        <tr><td>DataStore</td><td>Persistence layer</td><td>JSON encoding/decoding, image file management</td><td>406</td></tr>
+        <tr><td>CameraOverlayManager</td><td>Camera edge detection</td><td>Overlay positioning, guide frame calculations</td><td>223</td></tr>
+        <tr><td>OnboardingManager</td><td>First-launch flow</td><td>Step tracking, completion state</td><td>209</td></tr>
+        <tr><td>Citation</td><td>Academic reference</td><td>title, authors[], journal, year, doi, pmid, url</td><td>247</td></tr>
+        <tr><td>CameraViewModel</td><td>Camera state management</td><td>Capture session, permission handling</td><td>146</td></tr>
+        <tr><td>PosterCategory</td><td>Research classification</td><td>name, type (enum), color, icon</td><td>110</td></tr>
+        <tr><td>ChatMessage</td><td>Chat conversation unit</td><td>role, content, timestamp</td><td>81</td></tr>
+        <tr><td>EvidenceResult</td><td>RAG pipeline response</td><td>papers[], confidence scores</td><td>35</td></tr>
+        <tr><td>ResearchContext</td><td>Author questions + directions</td><td>questions[], futureDirections</td><td>11</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- API CONFIG -->
+<section class="section">
+  <h2 class="section-title">API Configuration</h2>
+  <p class="section-sub">Rate limits, models, and error handling across all integrations</p>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:1.5rem">
+    <table class="api-table">
+      <thead><tr><th>API</th><th>Model / Engine</th><th>Rate Limit</th><th>Cost</th><th>Retry</th></tr></thead>
+      <tbody>
+        <tr><td style="color:var(--green)">Apple Vision</td><td>On-device ML</td><td>Unlimited</td><td>Free</td><td>N/A</td></tr>
+        <tr><td style="color:var(--purple)">OpenAI</td><td>gpt-3.5-turbo (temp 0.3)</td><td>3,500 req/min</td><td>~$0.0015/req</td><td>3× exponential</td></tr>
+        <tr><td style="color:var(--cyan)">Perplexity</td><td>sonar (search mode)</td><td>1,000 req/hr</td><td>~$0.005/search</td><td>3× exponential</td></tr>
+        <tr><td style="color:var(--blue)">PubMed</td><td>E-Utilities (esearch/efetch)</td><td>3 req/sec</td><td>Free</td><td>3× exponential</td></tr>
+        <tr><td style="color:var(--yellow)">Evidence V2</td><td>text-embedding-004 + BigQuery</td><td>Cloud Functions</td><td>GCP pricing</td><td>3× exponential</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="font-family:var(--font-mono);font-size:.85rem;color:#fff;margin-bottom:.75rem">Cost per Scan</h3>
+  <div class="cost-grid">
+    <div class="cost-item"><div class="key" style="color:var(--green)">Vision OCR</div><div class="val">$0.00</div></div>
+    <div class="cost-item"><div class="key" style="color:var(--purple)">OpenAI Summary</div><div class="val">$0.0015</div></div>
+    <div class="cost-item"><div class="key" style="color:var(--purple)">OpenAI Questions</div><div class="val">$0.0010</div></div>
+    <div class="cost-item"><div class="key" style="color:var(--cyan)">Perplexity Search</div><div class="val">$0.0050</div></div>
+    <div class="cost-item"><div class="key" style="color:var(--blue)">PubMed Validation</div><div class="val">$0.00</div></div>
+    <div class="cost-item"><div class="key" style="color:#fff;font-weight:600">Total per Scan</div><div class="val" style="color:var(--accent);font-weight:600">~$0.0075</div></div>
+  </div>
+</section>
+
+<!-- RAG BACKEND -->
+<section class="section">
+  <h2 class="section-title">Cloud Backend — RAG Pipeline</h2>
+  <p class="section-sub">GCP Cloud Functions + BigQuery + Vertex AI for enhanced evidence retrieval</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.5rem">
+      <h3 style="font-family:var(--font-mono);font-size:.85rem;color:var(--yellow);margin-bottom:.75rem">functions/main.py — 769 lines</h3>
+      <p style="font-size:.82rem;color:var(--text2);line-height:1.6">
+        <code>evidenceV2</code> Cloud Function endpoint. Takes poster text, generates embeddings via Vertex AI (text-embedding-004), runs vector similarity search against BigQuery <code>pubmed_rag.papers</code> table, then applies a deterministic re-ranking layer:
+      </p>
+      <ul style="font-size:.78rem;color:var(--text2);margin-top:.75rem;padding-left:1.25rem;line-height:1.8">
+        <li><strong style="color:var(--yellow)">Recency boost:</strong> +0.03 for papers within 5 years</li>
+        <li><strong style="color:var(--yellow)">Keyword overlap:</strong> +0.04 for ≥5 matching terms</li>
+        <li><strong style="color:var(--yellow)">Generic penalty:</strong> −0.02 for review-heavy language</li>
+      </ul>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.5rem">
+      <h3 style="font-family:var(--font-mono);font-size:.85rem;color:var(--yellow);margin-bottom:.75rem">Ingestion Pipeline</h3>
+      <p style="font-size:.82rem;color:var(--text2);line-height:1.6;margin-bottom:.75rem">
+        Two-stage data pipeline for populating the BigQuery vector store:
+      </p>
+      <div style="font-family:var(--font-mono);font-size:.72rem;color:var(--text3);line-height:1.8">
+        <div><span style="color:var(--yellow)">1.</span> prepare_pubmed_subset.py (400 lines) — Fetches and filters PubMed metadata into JSONL</div>
+        <div><span style="color:var(--yellow)">2.</span> embed_and_load.py (564 lines) — Generates Vertex AI embeddings, loads into BigQuery with vector index</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div>
+    <span style="color:var(--accent);font-family:var(--font-mono)">PosterLens</span>
+    <span> · Generated by Limn for </span>
+    <a href="https://pharmatools.ai">PharmaTools.AI</a>
+  </div>
+  <div>
+    <a href="https://github.com/nickjlamb/PosterLens" style="margin-right:1rem">GitHub</a>
+    <a href="https://apps.apple.com/app/posterlens" style="margin-right:1rem">App Store</a>
+    <a href="https://docs.perplexity.ai/cookbook/showcase/posterlens">Perplexity Cookbook</a>
+  </div>
+</footer>
+
+<script>
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('animate'); observer.unobserve(e.target); } });
+}, { threshold: 0.1 });
+document.querySelectorAll('.service-card, .view-card, .stat-card').forEach(el => observer.observe(el));
+
+const sections = document.querySelectorAll('.section[id]');
+const navLinks = document.querySelectorAll('.header nav a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 100) current = s.id; });
+  navLinks.forEach(a => { a.classList.toggle('active', a.getAttribute('href') === '#' + current); });
+});
+</script>
+</body>
+</html>
