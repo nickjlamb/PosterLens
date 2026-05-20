@@ -51,9 +51,81 @@ struct SummaryView: View {
     @State private var showNotesEditor = false
     @State private var showTitleEditor = false
     @State private var titleDraft = ""
+    @State private var isGeneratingCategories = false
+    @State private var categoryGenMessage: String? = nil
 
     private var currentScan: PosterScan {
         dataStore.getScan(withID: scan.id) ?? scan
+    }
+
+    // Generate-categories action shown when a poster has no research categories yet
+    private var generateCategoriesButton: some View {
+        Button(action: { generateCategories() }) {
+            HStack(spacing: 10) {
+                if isGeneratingCategories {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Generating categories…")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.headline)
+                        .foregroundColor(DesignSystem.Colors.brandBlue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Generate research categories")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        if let message = categoryGenMessage {
+                            Text(message)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                Spacer()
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(isGeneratingCategories)
+    }
+
+    private func generateCategories() {
+        guard !isGeneratingCategories else { return }
+        HapticManager.shared.mediumImpact()
+        isGeneratingCategories = true
+        categoryGenMessage = nil
+
+        let target = currentScan
+        CategoryExtractionService.shared.extractCategories(from: target.rawText, summary: target.summaryPoints) { result in
+            DispatchQueue.main.async {
+                isGeneratingCategories = false
+                switch result {
+                case .success(let categories):
+                    if categories.isEmpty {
+                        categoryGenMessage = "No research categories found for this poster."
+                    } else {
+                        var updated = target
+                        updated.categories = categories
+                        dataStore.saveScan(updated)
+                        HapticManager.shared.success()
+                    }
+                case .failure:
+                    categoryGenMessage = "Couldn't generate categories — tap to try again."
+                }
+            }
+        }
     }
 
     var body: some View {
@@ -126,7 +198,7 @@ struct SummaryView: View {
                     .padding(.top, 8)
 
                 // Category tags with tap to see all
-                if let categories = scan.categories, !categories.isEmpty {
+                if let categories = currentScan.categories, !categories.isEmpty {
                     Button(action: {
                         HapticManager.shared.mediumImpact()
                         showCategories = true
@@ -158,6 +230,8 @@ struct SummaryView: View {
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
+                } else {
+                    generateCategoriesButton
                 }
 
                 // Process summary points to extract headings and content
@@ -276,7 +350,7 @@ struct SummaryView: View {
             }
         }
         .sheet(isPresented: $showCategories) {
-            CategoryDetailSheet(scan: scan)
+            CategoryDetailSheet(scan: currentScan)
         }
     }
     
