@@ -65,22 +65,9 @@ struct CameraView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Blue gradient background fills entire screen
-                DesignSystem.Colors.brandGradient
+                // Clean white background
+                Color(.systemBackground)
                     .ignoresSafeArea()
-
-                // Very subtle background circles (less prominent than in AboutView)
-                Circle()
-                    .fill(Color.white.opacity(0.05))
-                    .frame(width: 200, height: 200)
-                    .blur(radius: 30)
-                    .offset(x: -150, y: 50)
-
-                Circle()
-                    .fill(Color.white.opacity(0.05))
-                    .frame(width: 300, height: 300)
-                    .blur(radius: 40)
-                    .offset(x: 150, y: 400)
 
                 // Content VStack - no maxHeight
                 VStack(spacing: 0) {
@@ -118,42 +105,22 @@ struct CameraView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarHidden(true)
             .safeAreaInset(edge: .top) {
-                // Main header content
-                Group {
-                    if UIDevice.current.orientation.isLandscape {
-                        // Landscape header - use HStack and position to the left
-                        HStack(spacing: 8) {
-                            Spacer().frame(width: 16)
+                // Main header content - left-aligned, dark on white
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("PosterLens")
+                        .font(.largeTitle.bold())
+                        .foregroundColor(.primary)
 
-                            Text("PosterLens")
-                                .font(.title3.bold())
-                                .foregroundColor(.white)
-
-                            Text("Your AI Scientific Conference Companion")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white.opacity(0.9))
-                                .padding(.leading, 4)
-
-                            Spacer()
-                        }
-                        .frame(height: 44)
-                    } else {
-                        // Portrait header - use traditional VStack centered
-                        VStack(spacing: 4) {
-                            Text("PosterLens")
-                                .font(.title.bold())
-                                .foregroundColor(.white)
-
-                            Text("Your AI Scientific Conference Companion")
-                                .font(.headline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white.opacity(0.9))
-                        }
-                    }
+                    Text("Your AI Scientific Conference Companion")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
                 }
-                .padding(.top, 10)
-                .padding(.bottom, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
+                .background(Color(.systemBackground))
             }
             .alert("Error", isPresented: $viewModel.showingError) {
                 Button("OK", role: .cancel) {}
@@ -306,7 +273,7 @@ struct CameraView: View {
                         if !dataStore.savedScans.isEmpty {
                             VStack {
                                 Spacer()
-                                recentScansPreview
+                                recentScansPreview(isLandscape: true)
                                     .frame(width: geometry.size.width * 0.35)
                                     .offset(y: offsetY)
                                     .opacity(opacity)
@@ -317,47 +284,23 @@ struct CameraView: View {
                     }
                     .padding(.horizontal)
                 } else {
-                    // Portrait layout - vertical arrangement
-                    VStack {
-                        Spacer()
+                    // Portrait layout - top-aligned, scrollable
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            scanningGuidelinesPill
 
-                        // Camera button section with cards
-                        cameraScanCard
-                            .offset(y: offsetY)
-                            .opacity(opacity)
+                            cameraScanCard
 
-                        // Scanning Guidelines button
-                        Button(action: {
-                            showingScanningGuidelines = true
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: 16))
-                                Text("Scanning Guidelines")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                            if !dataStore.savedScans.isEmpty {
+                                recentScansPreview(isLandscape: false)
+                                    .id(refreshID) // Force refresh when this ID changes
                             }
-                            .foregroundColor(.white)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 20)
-                            .background(Color.white.opacity(0.2))
-                            .cornerRadius(25)
                         }
-                        .buttonPressAnimation()
-                        .padding(.top, 16)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
                         .offset(y: offsetY)
                         .opacity(opacity)
-
-                        Spacer()
-
-                        // Recent scans preview (teaser for history)
-                        if !dataStore.savedScans.isEmpty {
-                            recentScansPreview
-                                .padding(.bottom)
-                                .offset(y: offsetY)
-                                .opacity(opacity)
-                                .id(refreshID) // Force refresh when this ID changes
-                        }
                     }
                 }
                 
@@ -417,308 +360,165 @@ struct CameraView: View {
         }
     }
     
-    // Camera scan card with animations - responsive to orientation
+    // Full-width Scanning Guidelines pill
+    private var scanningGuidelinesPill: some View {
+        Button(action: {
+            HapticManager.shared.mediumImpact()
+            showingScanningGuidelines = true
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.secondary)
+
+                Text("Scanning Guidelines")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(14)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    // Compact blue scan card with an "Open camera" button
     private var cameraScanCard: some View {
-        GeometryReader { geometry in
-            let isLandscape = geometry.size.width > geometry.size.height
-            
-            Button(action: {
-                // Add haptic feedback
-                HapticManager.shared.mediumImpact()
-                
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
-                    showMotionGraphics = true
-                }
-                
-                // Delayed action to allow animation to run
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    showingScanner = true
-                    
-                    // Reset animation state for next use
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        showMotionGraphics = false
-                    }
-                }
-            }) {
-                ZStack {
-                    // Card background with shadow
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color.white)
-                        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
-                        .scaleEffect(showMotionGraphics ? 0.96 : 1.0)
-                    
-                    if isLandscape {
-                        // Landscape layout - horizontal arrangement
-                        HStack(spacing: 20) {
-                            // Left side - icon
-                            ZStack {
-                                // Background circle with gradient
-                                Circle()
-                                    .fill(LinearGradient(
-                                        colors: [DesignSystem.Colors.brandBlue, DesignSystem.Colors.brandBlueDark.opacity(0.8)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ))
-                                    .frame(width: 90, height: 90)
-                                    .scaleEffect(showMotionGraphics ? 1.1 : 1.0)
-                                    .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
-                                
-                                // Camera icon
-                                Image(systemName: "camera.viewfinder")
-                                    .font(.system(size: 38, weight: .medium))
-                                    .foregroundColor(.white)
-                            }
-                            .padding(.leading, 30)
-                            
-                            // Right side - text and button
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Scan Scientific Poster")
-                                    .font(.title3.bold())
-                                    .foregroundColor(.primary)
-                                
-                                Text("Point your camera at a research poster to capture, analyze, and get instant insights")
-                                    .font(.subheadline)
-                                    .foregroundColor(.black)
-                                    .fontWeight(.medium)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .padding(.trailing, 10)
-                                
-                                // Scan button
-                                Text("Tap to Scan")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .padding(.vertical, 10)
-                                    .padding(.horizontal, 30)
-                                    .background(LinearGradient(
-                                        colors: [DesignSystem.Colors.brandBlue, DesignSystem.Colors.brandBlueDark],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ))
-                                    .cornerRadius(30)
-                                    .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
-                            }
-                            .padding(.vertical)
-                            .padding(.horizontal, 20)
-                            .padding(.trailing, 10)
-                        }
-                    } else {
-                        // Portrait layout - vertical arrangement
-                        VStack(spacing: 24) {
-                            // Animated camera icon
-                            ZStack {
-                                // Background circle with gradient
-                                Circle()
-                                    .fill(LinearGradient(
-                                        colors: [DesignSystem.Colors.brandBlue, DesignSystem.Colors.brandBlueDark.opacity(0.8)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ))
-                                    .frame(width: 100, height: 100)
-                                    .scaleEffect(showMotionGraphics ? 1.1 : 1.0)
-                                    .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
-                                
-                                // Camera icon
-                                Image(systemName: "camera.viewfinder")
-                                    .font(.system(size: 42, weight: .medium))
-                                    .foregroundColor(.white)
-                            }
-                            
-                            VStack(spacing: 12) {
-                                Text("Scan Scientific Poster")
-                                    .font(.title3.bold())
-                                    .foregroundColor(.primary)
-                                
-                                Text("Point your camera at a research poster\nto capture,\nanalyze, and get instant insights")
-                                    .font(.subheadline)
-                                    .foregroundColor(.black)
-                                    .fontWeight(.medium)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
-                            }
-                            
-                            // Scan button
-                            Text("Tap to Scan")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 40)
-                                .background(LinearGradient(
-                                    colors: [DesignSystem.Colors.brandBlue, DesignSystem.Colors.brandBlueDark],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                ))
-                                .cornerRadius(30)
-                                .shadow(color: Color.blue.opacity(0.3), radius: 5, x: 0, y: 3)
-                        }
-                        .padding(.vertical, 32)
-                        .padding(.horizontal, 20)
-                    }
+        Button(action: {
+            HapticManager.shared.mediumImpact()
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                showMotionGraphics = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                showingScanner = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    showMotionGraphics = false
                 }
             }
-            .buttonStyle(ScaleButtonStyle())
+        }) {
+            ZStack(alignment: .topTrailing) {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(DesignSystem.Colors.brandGradient)
+                    .shadow(color: DesignSystem.Colors.brandBlue.opacity(0.3), radius: 12, x: 0, y: 6)
+
+                // Decorative camera glyph
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: 64, weight: .light))
+                    .foregroundColor(.white.opacity(0.12))
+                    .padding(20)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("CAPTURE")
+                        .font(.caption.weight(.bold))
+                        .tracking(1.5)
+                        .foregroundColor(.white.opacity(0.7))
+
+                    Text("Scan Scientific Poster")
+                        .font(.title.bold())
+                        .foregroundColor(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Point your camera at a research poster to capture, analyze, and get instant insights.")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("Open camera")
+                            .font(.headline)
+                    }
+                    .foregroundColor(DesignSystem.Colors.brandBlue)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 22)
+                    .background(Color.white)
+                    .cornerRadius(24)
+                    .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 2)
+                    .padding(.top, 6)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scaleEffect(showMotionGraphics ? 0.97 : 1.0)
         }
-        .frame(height: UIDevice.current.orientation.isLandscape ? 180 : 360)
-        .padding(.horizontal, 24)
+        .buttonStyle(ScaleButtonStyle())
         .accessibilityLabel("Scan scientific poster")
     }
     
     // Recent scans preview section - responsive to orientation
-    private var recentScansPreview: some View {
-        GeometryReader { geometry in
-            let isLandscape = geometry.size.width > geometry.size.height
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Recent Scans")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                
-                if isLandscape {
-                    // In landscape mode, show a grid layout
-                    VStack {
-                        // Use sorted array to ensure most recent scans appear first
-                        let recentScans = dataStore.savedScans.sorted(by: { $0.date > $1.date }).prefix(4)
-                        
-                        // Calculate sizes based on available space
-                        let itemSize = min(geometry.size.width / 2.2, 160)
-                        
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: itemSize), spacing: 10)], spacing: 10) {
-                            ForEach(Array(recentScans.enumerated()), id: \.element.id) { index, scan in
-                                NavigationLink(destination: SummaryView(scan: scan)) {
-                                    LandscapeScanPreviewItem(scan: scan, width: itemSize)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                    }
-                } else {
-                    // In portrait mode, use horizontal scroll
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 16) {
-                            // Use sorted array to ensure most recent scans appear first
-                            ForEach(Array(dataStore.savedScans.sorted(by: { $0.date > $1.date }).prefix(5).enumerated()), id: \.element.id) { index, scan in
-                                NavigationLink(destination: SummaryView(scan: scan)) {
-                                    PortraitScanPreviewItem(scan: scan)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 8)
-                    }
+    @ViewBuilder
+    private func recentScansPreview(isLandscape: Bool) -> some View {
+        if isLandscape {
+            landscapeRecentScans
+        } else {
+            portraitRecentScans
+        }
+    }
+
+    // Section header with "See all" jumping to the History tab
+    private var recentSectionHeader: some View {
+        HStack {
+            Text("Recent Scans")
+                .font(.title3.bold())
+                .foregroundColor(.primary)
+
+            Spacer()
+
+            Button(action: {
+                HapticManager.shared.mediumImpact()
+                NotificationCenter.default.post(name: NSNotification.Name("ShowHistory"), object: nil)
+            }) {
+                HStack(spacing: 2) {
+                    Text("See all")
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(DesignSystem.Colors.brandBlue)
+            }
+        }
+    }
+
+    // Portrait: stack of horizontal cards (padding handled by parent)
+    private var portraitRecentScans: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            recentSectionHeader
+
+            VStack(spacing: 12) {
+                ForEach(dataStore.savedScans.sorted(by: { $0.date > $1.date }).prefix(4)) { scan in
+                    ScanCardView(scan: scan, isHorizontal: true)
                 }
             }
         }
     }
-    
-    // Item for portrait mode scan preview
-    private struct PortraitScanPreviewItem: View {
-        let scan: PosterScan
-        @EnvironmentObject private var dataStore: DataStore
-        @State private var showingActionSheet = false
-        @State private var showingShareSheet = false
-        
-        var body: some View {
-            VStack(alignment: .leading, spacing: 4) {
-                // Thumbnail or placeholder in a fixed size container
-                ZStack {
-                    if let image = scan.image {
-                        // Check image orientation
-                        let isLandscape = image.size.width > image.size.height
-                        
-                        if isLandscape {
-                            // For landscape images, we'll center them and maintain aspect ratio
-                            ZStack(alignment: .topTrailing) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFit() // Maintain aspect ratio without filling
-                                    .frame(width: 120) // Fixed width
-                                    .frame(height: 80, alignment: .center) // Center in fixed height container
-                                
-                                // Landscape indicator
-                                Image(systemName: "rectangle")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white)
-                                    .padding(4)
-                                    .background(Color.black.opacity(0.4))
-                                    .cornerRadius(4)
-                                    .padding(4)
-                            }
-                        } else {
-                            // For portrait images, fill the space
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 120, height: 80)
-                                .clipped() // Clip the image to prevent overflow
+
+    // Landscape: grid layout sized to available width
+    private var landscapeRecentScans: some View {
+        GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: 8) {
+                recentSectionHeader
+                    .padding(.horizontal, 24)
+
+                let recentScans = dataStore.savedScans.sorted(by: { $0.date > $1.date }).prefix(4)
+                let itemSize = min(geometry.size.width / 2.2, 160)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: itemSize), spacing: 10)], spacing: 10) {
+                    ForEach(Array(recentScans.enumerated()), id: \.element.id) { index, scan in
+                        NavigationLink(destination: SummaryView(scan: scan)) {
+                            LandscapeScanPreviewItem(scan: scan, width: itemSize)
                         }
-                    } else {
-                        // Placeholder for missing image
-                        Rectangle()
-                            .fill(Color.white.opacity(0.3))
-                            .frame(width: 120, height: 80)
-                            .overlay(
-                                Image(systemName: "photo")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.white.opacity(0.7))
-                            )
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
-                .cornerRadius(8)
-                .shadow(color: Color.black.opacity(0.2), radius: 3, x: 0, y: 2)
-                
-                // Title and date
-                Text(scan.title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                    .foregroundColor(.white)
-                    .frame(width: 120, alignment: .leading)
-                
-                Text(scan.dateFormatted)
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.7))
-                    .lineLimit(1)
-                    .frame(width: 120, alignment: .leading)
-            }
-            .padding(.vertical, 4)
-            .contextMenu {
-                // Context menu for long press
-                Button(action: {
-                    showingShareSheet = true
-                }) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-                
-                Button(role: .destructive, action: {
-                    HapticManager.shared.warning()
-                    showingActionSheet = true
-                }) {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-            .confirmationDialog("Delete Scan", isPresented: $showingActionSheet, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
-                    HapticManager.shared.success()
-                    dataStore.deleteScan(withID: scan.id)
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Are you sure you want to delete this scan? This action cannot be undone.")
-            }
-            .sheet(isPresented: $showingShareSheet) {
-                Group {
-                    if let image = scan.image {
-                        // Share both the image and a text summary
-                        let textToShare = "Poster: \(scan.title)\n\nSummary:\n" + scan.summaryPoints.joined(separator: "\n\n")
-                        CustomShareSheet(items: [image, textToShare])
-                    } else {
-                        // Share just the text if no image
-                        let textToShare = "Poster: \(scan.title)\n\nSummary:\n" + scan.summaryPoints.joined(separator: "\n\n")
-                        CustomShareSheet(items: [textToShare])
-                    }
-                }
+                .padding(.horizontal, 24)
             }
         }
     }

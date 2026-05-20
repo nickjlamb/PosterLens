@@ -28,7 +28,7 @@ struct ImprovedHistoryView: View {
     @State private var showingAboutView = false
     @State private var exportURL: URL?
     @State private var exportURLs: [URL] = []
-    @State private var gridColumns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 2)
+    @State private var gridColumns = [GridItem(.flexible(), spacing: 20)]
     @State private var isEditMode: EditMode = .inactive
     @State private var viewHeight: CGFloat = 0
 
@@ -407,7 +407,7 @@ struct ImprovedHistoryView: View {
             ForEach(Array(dataStore.savedScans.sorted(by: { $0.date > $1.date }).enumerated()), id: \.element.id) { index, scan in
                 if isEditMode.isEditing && !isSelectionMode {
                     // Edit mode for deletion (original functionality)
-                    ScanCardView(scan: scan)
+                    ScanCardView(scan: scan, isHorizontal: gridColumns.count == 1)
                         .overlay(
                             deleteButton(for: scan),
                             alignment: .topTrailing
@@ -428,7 +428,8 @@ struct ImprovedHistoryView: View {
                         isSelected: selectedScanIDs.contains(scan.id),
                         onSelect: { isSelected in
                             handleSelection(scan: scan, isSelected: isSelected)
-                        }
+                        },
+                        isHorizontal: gridColumns.count == 1
                     )
                     // Apply staggered entry animation
                     .offset(y: appeared ? 0 : 20)

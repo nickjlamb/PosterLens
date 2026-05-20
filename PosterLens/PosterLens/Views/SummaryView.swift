@@ -47,26 +47,78 @@ struct SummaryView: View {
     @State private var showHistory = false
     @State private var showChat = false
     @State private var showCategories = false
-    
+    @State private var showImageViewer = false
+    @State private var showNotesEditor = false
+    @State private var showTitleEditor = false
+    @State private var titleDraft = ""
+
+    private var currentScan: PosterScan {
+        dataStore.getScan(withID: scan.id) ?? scan
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if let image = scan.image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.2), radius: 5, x: 0, y: 2)
+                    Button(action: {
+                        HapticManager.shared.mediumImpact()
+                        showImageViewer = true
+                    }) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .cornerRadius(12)
+                                .shadow(color: Color.black.opacity(0.2), radius: 5, x: 0, y: 2)
+
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(8)
+                                .background(.ultraThinMaterial, in: Circle())
+                                .padding(10)
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .fullScreenCover(isPresented: $showImageViewer) {
+                        PosterImageViewer(image: image)
+                    }
                 }
                 
-                Text(scan.title)
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .multilineTextAlignment(.center)
+                Button(action: {
+                    titleDraft = currentScan.title
+                    showTitleEditor = true
+                }) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(currentScan.title)
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                            .multilineTextAlignment(.center)
+
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(DesignSystem.Colors.brandBlue)
+                    }
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.bottom, 8)
-                    .padding(.horizontal)
-                
+                }
+                .buttonStyle(PlainButtonStyle())
+                .padding(.bottom, 8)
+                .padding(.horizontal)
+                .alert("Edit Title", isPresented: $showTitleEditor) {
+                    TextField("Poster title", text: $titleDraft)
+                    Button("Cancel", role: .cancel) {}
+                    Button("Save") {
+                        let trimmed = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        var updated = currentScan
+                        updated.title = trimmed
+                        dataStore.saveScan(updated)
+                    }
+                } message: {
+                    Text("Fix the title if it was read incorrectly.")
+                }
+
                 Text("Summary")
                     .font(.title2)
                     .fontWeight(.semibold)
@@ -112,8 +164,20 @@ struct SummaryView: View {
                 ForEach(processedSummaryPoints(), id: \.title) { point in
                     SummaryCardView(title: point.title, content: point.content)
                 }
-                
-                
+
+                NotesCard(
+                    notes: currentScan.userNotes,
+                    onTap: {
+                        HapticManager.shared.mediumImpact()
+                        showNotesEditor = true
+                    },
+                    onDelete: {
+                        var updated = currentScan
+                        updated.userNotes = nil
+                        dataStore.saveScan(updated)
+                    }
+                )
+
                 // Add ButtonRowView for the three interactive buttons
                 ButtonRowView(scan: scan)
                 
@@ -190,6 +254,13 @@ struct SummaryView: View {
             if !scanSaved {
                 dataStore.saveScan(scan)
                 scanSaved = true
+            }
+        }
+        .sheet(isPresented: $showNotesEditor) {
+            NotesEditorSheet(initialNotes: currentScan.userNotes ?? "") { newNotes in
+                var updated = currentScan
+                updated.userNotes = newNotes.isEmpty ? nil : newNotes
+                dataStore.saveScan(updated)
             }
         }
         .sheet(isPresented: $showHistory) {

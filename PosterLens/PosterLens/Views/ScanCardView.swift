@@ -13,86 +13,31 @@ struct ScanCardView: View {
     var isSelectionMode: Bool = false
     var isSelected: Bool = false
     var onSelect: ((Bool) -> Void)? = nil
-    
+
+    // Layout: vertical (thumbnail on top) or horizontal (thumbnail on left)
+    var isHorizontal: Bool = false
+
+    private var cardHeight: CGFloat { isHorizontal ? 108 : 180 }
+
+    private var hasChatMessages: Bool {
+        guard let conversation = dataStore.conversations.first(where: { $0.posterId == scan.id }) else {
+            return false
+        }
+        return conversation.messages.contains(where: { $0.sender == .user })
+    }
+
+    private var hasNotes: Bool {
+        !(scan.userNotes ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         ZStack {
             // Main card content
             NavigationLink(destination: SummaryView(scan: scan)) {
-                ZStack(alignment: .bottom) {
-                    // Thumbnail image - improved for landscape images
-                    if let image = scan.image {
-                        ZStack {
-                            // Check if image is landscape
-                            if image.size.width > image.size.height {
-                                // Landscape image - contain within frame
-                                ZStack {
-                                    // Background for empty space
-                                    Rectangle()
-                                        .fill(Color.black)
-                                        .frame(height: 180)
-                                    
-                                    // Image with contain mode to show entire image
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(height: 180)
-                                    
-                                    // Indicator for landscape view in corner
-                                    VStack {
-                                        HStack {
-                                            Spacer()
-                                            Image(systemName: "arrow.left.and.right")
-                                                .font(.system(size: 12))
-                                                .foregroundColor(.white)
-                                                .padding(6)
-                                                .background(Color.black.opacity(0.6))
-                                                .cornerRadius(6)
-                                                .padding(8)
-                                        }
-                                        Spacer()
-                                    }
-                                }
-                            } else {
-                                // Portrait image - fill as before
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(height: 180)
-                                    .clipped()
-                            }
-                        }
-                    } else {
-                        // No image placeholder
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(height: 180)
-                            .overlay(
-                                Image(systemName: "doc.text.image")
-                                    .font(.system(size: 30))
-                                    .foregroundColor(.gray)
-                            )
-                    }
-                    
-                    // Title overlay with categories - UX: Use DesignSystem spacing
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.tiny) {
-                        Text(scan.title)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-
-                        Text(scan.dateFormatted)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-
-                        // Category tags
-                        if let categories = scan.categories, !categories.isEmpty {
-                            CategoryTagRow(categories: categories, maxVisible: 3, compact: true)
-                                .padding(.top, 2)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(DesignSystem.Spacing.extraSmall)
-                    .background(Material.regularMaterial)
+                if isHorizontal {
+                    horizontalCardContent
+                } else {
+                    verticalCardContent
                 }
             }
             .buttonStyle(PlainButtonStyle())
@@ -124,8 +69,8 @@ struct ScanCardView: View {
                         // Full-size transparent button area
                         Rectangle()
                             .fill(Color.clear)
-                            .frame(height: 180)
-                        
+                            .frame(height: cardHeight)
+
                         // Selection indicator in top-right corner
                         VStack {
                             HStack {
@@ -191,6 +136,147 @@ struct ScanCardView: View {
             }
         }
     }
+
+    // Vertical layout: thumbnail on top, title overlay at the bottom
+    private var verticalCardContent: some View {
+        ZStack(alignment: .bottom) {
+            if let image = scan.image {
+                ZStack {
+                    if image.size.width > image.size.height {
+                        ZStack {
+                            Rectangle()
+                                .fill(Color.black)
+                                .frame(height: 180)
+
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 180)
+
+                            VStack {
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "arrow.left.and.right")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.white)
+                                        .padding(6)
+                                        .background(Color.black.opacity(0.6))
+                                        .cornerRadius(6)
+                                        .padding(8)
+                                }
+                                Spacer()
+                            }
+                        }
+                    } else {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 180)
+                            .clipped()
+                    }
+                }
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(height: 180)
+                    .overlay(
+                        Image(systemName: "doc.text.image")
+                            .font(.system(size: 30))
+                            .foregroundColor(.gray)
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.tiny) {
+                Text(scan.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                Text(scan.dateFormatted)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                if let categories = scan.categories, !categories.isEmpty {
+                    CategoryTagRow(categories: categories, maxVisible: 3, compact: true)
+                        .padding(.top, 2)
+                }
+
+                ScanCardMetaRow(
+                    findingsCount: scan.summaryPoints.count,
+                    hasChat: hasChatMessages,
+                    hasNotes: hasNotes
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(DesignSystem.Spacing.extraSmall)
+            .background(Material.regularMaterial)
+        }
+    }
+
+    // Horizontal layout: thumbnail on the left, text on the right
+    private var horizontalCardContent: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                if let image = scan.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 92, height: 92)
+                        .clipped()
+                } else {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.25))
+                        .frame(width: 92, height: 92)
+                        .overlay(
+                            Image(systemName: "doc.text.image")
+                                .font(.system(size: 24))
+                                .foregroundColor(.gray)
+                        )
+                }
+            }
+            .cornerRadius(10)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(scan.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(2)
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+
+                Text(scan.dateFormatted)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                if let categories = scan.categories, !categories.isEmpty {
+                    CategoryTagRow(categories: categories, maxVisible: 2, compact: true)
+                }
+
+                ScanCardMetaRow(
+                    findingsCount: scan.summaryPoints.count,
+                    hasChat: hasChatMessages,
+                    hasNotes: hasNotes
+                )
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.secondary.opacity(0.6))
+        }
+        .padding(8)
+        .frame(height: cardHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.systemBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                        .stroke(Color.gray.opacity(0.18), lineWidth: 1)
+                )
+        )
+    }
 }
 
 struct PlaceholderCardView: View {
@@ -251,5 +337,53 @@ struct PlaceholderCardView: View {
         // Add hover effect for better interactivity
         .scaleEffect(isPressed ? 0.95 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
+    }
+}
+
+struct ScanCardMetaRow: View {
+    let findingsCount: Int
+    let hasChat: Bool
+    let hasNotes: Bool
+
+    var body: some View {
+        let visibleBadges = badges
+        if !visibleBadges.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(visibleBadges, id: \.label) { badge in
+                    metaBadge(icon: badge.icon, label: badge.label)
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var badges: [(icon: String, label: String)] {
+        var items: [(icon: String, label: String)] = []
+        if findingsCount > 0 {
+            items.append(("lightbulb.fill", "\(findingsCount) finding\(findingsCount == 1 ? "" : "s")"))
+        }
+        if hasChat {
+            items.append(("bubble.left.and.bubble.right.fill", "Chat"))
+        }
+        if hasNotes {
+            items.append(("note.text", "Notes"))
+        }
+        return items
+    }
+
+    private func metaBadge(icon: String, label: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+        }
+        .foregroundColor(.secondary)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(
+            Capsule()
+                .fill(Color.secondary.opacity(0.12))
+        )
     }
 }

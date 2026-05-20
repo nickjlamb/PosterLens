@@ -8,7 +8,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
     }
 
     let id: UUID
-    let title: String
+    var title: String
     let rawText: String
     let summaryPoints: [String]
     let date: Date
@@ -17,6 +17,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
     var researchContext: ResearchContext?
     var imageFilename: String?
     var categories: [PosterCategory]?
+    var userNotes: String?
     
     // UIImage can't be directly Codable, so we'll handle it separately
     // This is a transient property not stored in Codable representation
@@ -45,13 +46,13 @@ struct PosterScan: Identifiable, Codable, Equatable {
 
         // Convert UIImage to Data for storage
         if let image = image {
-            self.imageData = image.jpegData(compressionQuality: 0.7)
+            self.imageData = image.jpegData(compressionQuality: 0.9)
         }
     }
     
     // Custom Codable implementation to handle UIImage
     enum CodingKeys: String, CodingKey {
-        case id, title, rawText, summaryPoints, date, imageData, authorQuestions, hasPermission, researchContext, imageFilename, categories
+        case id, title, rawText, summaryPoints, date, imageData, authorQuestions, hasPermission, researchContext, imageFilename, categories, userNotes
     }
     
     init(from decoder: Decoder) throws {
@@ -67,6 +68,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
         researchContext = try container.decodeIfPresent(ResearchContext.self, forKey: .researchContext)
         imageFilename = try container.decodeIfPresent(String.self, forKey: .imageFilename)
         categories = try container.decodeIfPresent([PosterCategory].self, forKey: .categories)
+        userNotes = try container.decodeIfPresent(String.self, forKey: .userNotes)
 
         // Convert Data back to UIImage
         if let imageData = imageData {
@@ -87,6 +89,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
         try container.encodeIfPresent(researchContext, forKey: .researchContext)
         try container.encodeIfPresent(imageFilename, forKey: .imageFilename)
         try container.encodeIfPresent(categories, forKey: .categories)
+        try container.encodeIfPresent(userNotes, forKey: .userNotes)
     }
     
     // Create a new scan with updated questions but preserve the original ID
@@ -112,7 +115,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
 
         // Convert UIImage to Data for storage
         if let image = image {
-            self.imageData = image.jpegData(compressionQuality: 0.7)
+            self.imageData = image.jpegData(compressionQuality: 0.9)
         }
     }
 }

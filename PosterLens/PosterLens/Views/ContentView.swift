@@ -23,6 +23,9 @@ struct ContentView: View {
                     .tag(1)
             }
             .accentColor(.blue)  // Make tab items more visible
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowHistory"))) { _ in
+                selectedTab = 1
+            }
             .onAppear {
                 // Configure navigation bar appearance for transparent background with white controls
                 let navBarAppearance = UINavigationBarAppearance()
