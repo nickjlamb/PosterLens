@@ -26,18 +26,19 @@ struct ContentView: View {
                 selectedTab = 1
             }
             .onAppear {
-                // Configure navigation bar appearance for transparent background with white controls
+                // Configure navigation bar for the white/native design: dark title, brand-blue controls
+                let brandBlueUI = UIColor(red: 0.17, green: 0.45, blue: 0.87, alpha: 1)
                 let navBarAppearance = UINavigationBarAppearance()
                 navBarAppearance.configureWithTransparentBackground()
                 navBarAppearance.backgroundColor = .clear
-                navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
-                navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+                navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.label]
+                navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.label]
 
                 // Apply navigation bar appearance globally
                 UINavigationBar.appearance().standardAppearance = navBarAppearance
                 UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
                 UINavigationBar.appearance().compactAppearance = navBarAppearance
-                UINavigationBar.appearance().tintColor = .white
+                UINavigationBar.appearance().tintColor = brandBlueUI
 
                 // Customize tab bar appearance
                 let tabBarAppearance = UITabBarAppearance()

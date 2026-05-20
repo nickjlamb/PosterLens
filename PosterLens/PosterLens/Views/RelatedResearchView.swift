@@ -83,7 +83,7 @@ struct RelatedResearchView: View {
                                     .foregroundColor(.white)
                                     .padding(.vertical, 12)
                                     .padding(.horizontal, 20)
-                                    .background(Color.green)
+                                    .background(DesignSystem.Colors.brandBlue)
                                     .cornerRadius(10)
                                     .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
                             }
@@ -96,7 +96,7 @@ struct RelatedResearchView: View {
                         VStack(spacing: 20) {
                             Image(systemName: "doc.text.magnifyingglass")
                                 .font(.system(size: 60))
-                                .foregroundColor(.green)
+                                .foregroundColor(DesignSystem.Colors.brandBlue)
                                 .opacity(0.8)
                                 .padding(.top, 40)
                             
@@ -118,7 +118,7 @@ struct RelatedResearchView: View {
                                     .foregroundColor(.white)
                                     .padding(.vertical, 14)
                                     .padding(.horizontal, 24)
-                                    .background(Color.green)
+                                    .background(DesignSystem.Colors.brandBlue)
                                     .cornerRadius(12)
                                     .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
                             }
@@ -268,7 +268,7 @@ struct PaperCardView: View {
                     Spacer(minLength: 4)
                     
                     Image(systemName: "checkmark.seal.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(DesignSystem.Colors.brandBlue)
                         .font(.caption)
                 }
             }
@@ -327,8 +327,8 @@ struct PaperCardView: View {
                         .fontWeight(.bold)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.green.opacity(0.2))
-                        .foregroundColor(.green)
+                        .background(DesignSystem.Colors.brandBlue.opacity(0.2))
+                        .foregroundColor(DesignSystem.Colors.brandBlue)
                         .cornerRadius(4)
                 } else if isPubMedSearch {
                     Text("PubMed Search")
@@ -449,7 +449,7 @@ struct PaperCardView: View {
                                 .foregroundColor(.white)
                                 .padding(.vertical, 8)
                                 .padding(.horizontal, 16)
-                                .background(Color.green)
+                                .background(DesignSystem.Colors.brandBlue)
                                 .cornerRadius(8)
                             }
                         } else if let urlString = paper.url, let url = URL(string: urlString) {
@@ -464,7 +464,7 @@ struct PaperCardView: View {
                                 .foregroundColor(.white)
                                 .padding(.vertical, 8)
                                 .padding(.horizontal, 16)
-                                .background(Color.green)
+                                .background(DesignSystem.Colors.brandBlue)
                                 .cornerRadius(8)
                             }
                         }
@@ -638,7 +638,7 @@ struct SearchingAnimationView: View {
             ZStack {
                 // Outer circle
                 Circle()
-                    .stroke(Color.green.opacity(0.2), lineWidth: 8)
+                    .stroke(DesignSystem.Colors.brandBlue.opacity(0.2), lineWidth: 8)
                     .frame(width: 120, height: 120)
 
                 // Animated arc
@@ -646,7 +646,7 @@ struct SearchingAnimationView: View {
                     .trim(from: 0, to: 0.7)
                     .stroke(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.green, Color.blue]),
+                            gradient: Gradient(colors: [DesignSystem.Colors.brandBlue, Color.blue]),
                             startPoint: .leading,
                             endPoint: .trailing
                         ),
@@ -663,7 +663,7 @@ struct SearchingAnimationView: View {
                 // Icon - different for RAG vs Perplexity
                 Image(systemName: isRAGEnabled ? "brain.head.profile" : "doc.text.magnifyingglass")
                     .font(.system(size: 36))
-                    .foregroundColor(.green)
+                    .foregroundColor(DesignSystem.Colors.brandBlue)
             }
             .padding(.bottom, 10)
 
@@ -702,7 +702,7 @@ struct AnimatedDotsView: View {
         HStack(spacing: 4) {
             ForEach(0..<3) { index in
                 Circle()
-                    .fill(Color.green)
+                    .fill(DesignSystem.Colors.brandBlue)
                     .frame(width: 8, height: 8)
                     .opacity(dotOpacities[index])
                     .animation(
@@ -751,7 +751,7 @@ struct StepIndicatorView: View {
             // Number circle
             ZStack {
                 Circle()
-                    .fill(isActive ? Color.green : Color.gray.opacity(0.3))
+                    .fill(isActive ? DesignSystem.Colors.brandBlue : Color.gray.opacity(0.3))
                     .frame(width: 28, height: 28)
                 
                 Text("\(number)")
