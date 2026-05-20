@@ -4,7 +4,6 @@ struct ContentView: View {
     @EnvironmentObject private var dataStore: DataStore
     @EnvironmentObject private var onboardingManager: OnboardingManager
     @State private var selectedTab = 0
-    @State private var showingAboutView = false
     // Removed test panel
     
     var body: some View {
@@ -90,10 +89,6 @@ struct ContentView: View {
                 }
                 .zIndex(1) // Ensure tooltip appears above other content
             }
-        }
-        .sheet(isPresented: $showingAboutView) {
-            AboutView()
-                .environmentObject(onboardingManager)
         }
     }
 }

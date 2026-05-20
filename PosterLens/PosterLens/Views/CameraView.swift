@@ -53,6 +53,7 @@ struct CameraView: View {
     @State private var offsetY: CGFloat = 50
     @State private var opacity: Double = 0
     @State private var showingScanningGuidelines = false
+    @State private var showingAboutView = false
 
     // Animation properties
     @State private var pulseScale: CGFloat = 1.0
@@ -106,15 +107,30 @@ struct CameraView: View {
             .navigationBarHidden(true)
             .safeAreaInset(edge: .top) {
                 // Main header content - left-aligned, dark on white
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("PosterLens")
-                        .font(.largeTitle.bold())
-                        .foregroundColor(.primary)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("PosterLens")
+                            .font(.largeTitle.bold())
+                            .foregroundColor(.primary)
 
-                    Text("Your AI Scientific Conference Companion")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
+                        Text("Your AI Scientific Conference Companion")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        HapticManager.shared.lightImpact()
+                        showingAboutView = true
+                    }) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 22, weight: .regular))
+                            .foregroundColor(DesignSystem.Colors.brandBlue)
+                    }
+                    .accessibilityLabel("About PosterLens")
+                    .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
@@ -147,6 +163,10 @@ struct CameraView: View {
             }
             .sheet(isPresented: $showingScanningGuidelines) {
                 ScanningGuidelinesView()
+            }
+            .sheet(isPresented: $showingAboutView) {
+                AboutView()
+                    .environmentObject(onboardingManager)
             }
         }
     }
@@ -425,7 +445,7 @@ struct CameraView: View {
                         .foregroundColor(.white)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Point your camera at a research poster to capture, analyze, and get instant insights.")
+                    Text("Get the key points, then ask questions, chat, and explore related research and future directions.")
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.85))
                         .fixedSize(horizontal: false, vertical: true)

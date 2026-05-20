@@ -25,7 +25,6 @@ struct ImprovedHistoryView: View {
     @EnvironmentObject private var dataStore: DataStore
     @State private var showingDeleteAlert = false
     @State private var showingExportSheet = false
-    @State private var showingAboutView = false
     @State private var exportURL: URL?
     @State private var exportURLs: [URL] = []
     @State private var gridColumns = [GridItem(.flexible(), spacing: 20)]
@@ -163,14 +162,6 @@ struct ImprovedHistoryView: View {
                             }
 
                             Menu {
-                                Button(action: {
-                                    showingAboutView = true
-                                }) {
-                                    Label("About", systemImage: "info.circle")
-                                }
-
-                                Divider()
-
                                 Button(action: {
                                     // Haptic feedback
                                     let impactFeedback = UIImpactFeedbackGenerator(style: .light)
@@ -311,9 +302,6 @@ struct ImprovedHistoryView: View {
                 } else if !exportURLs.isEmpty {
                     ShareSheet(items: exportURLs)
                 }
-            }
-            .sheet(isPresented: $showingAboutView) {
-                AboutView()
             }
         }
     }

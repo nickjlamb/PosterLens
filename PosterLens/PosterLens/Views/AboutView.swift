@@ -2,26 +2,6 @@ import SwiftUI
 import MessageUI
 import UIKit
 
-// App Icon View that uses the appicon from the asset catalog
-struct AppIconView: View {
-    var body: some View {
-        // Use the standalone appicon that we copied to its own image set
-        ZStack {
-            // Static glow effect
-            Circle()
-                .fill(Color.white.opacity(0.8))
-                .frame(width: 140, height: 140)
-                .blur(radius: 20)
-                .opacity(0.7)
-            
-            // App icon without animations
-            Image("appicon")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-        }
-    }
-}
-
 // Define a preference key for scroll offset
 struct ScrollOffsetPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
@@ -87,9 +67,9 @@ struct AboutView: View {
                     mainContentView
                 }
             }
-            .navigationTitle("About")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .preferredColorScheme(.dark)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     doneButton
@@ -111,24 +91,10 @@ struct AboutView: View {
         }
     }
     
-    // Background view with gradient and decorative elements
+    // Clean white background
     private var backgroundView: some View {
-        ZStack {
-            DesignSystem.Colors.brandGradient
-                .ignoresSafeArea()
-                
-            Circle()
-                .fill(Color.white.opacity(0.1))
-                .frame(width: 200, height: 200)
-                .blur(radius: 30)
-                .offset(x: -150 + scrollOffset * 0.2, y: 50 - scrollOffset * 0.1)
-            
-            Circle()
-                .fill(Color.white.opacity(0.1))
-                .frame(width: 300, height: 300)
-                .blur(radius: 40)
-                .offset(x: 150 - scrollOffset * 0.1, y: 400 - scrollOffset * 0.25)
-        }
+        Color(.systemBackground)
+            .ignoresSafeArea()
     }
     
     // Scroll offset tracker
@@ -152,37 +118,35 @@ struct AboutView: View {
         .padding()
     }
     
-    // App header section with logo and version
+    // App header section with name, tagline, and version
     private var headerSection: some View {
-        VStack(spacing: 16) {
-            AppIconView()
-                .frame(width: 120, height: 120)
-                .cornerRadius(28)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1.5)
-                )
-                .offset(y: appearAnimation ? 0 : -20)
-                .opacity(appearAnimation ? 1.0 : 0.0)
-            
+        VStack(spacing: 10) {
             Text("PosterLens")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-                .shadow(color: Color.black.opacity(0.2), radius: 2, x: 0, y: 2)
+                .font(.system(size: 32, weight: .bold, design: .rounded))
+                .foregroundColor(.primary)
                 .offset(y: appearAnimation ? 0 : 10)
                 .opacity(appearAnimation ? 1.0 : 0.0)
-            
+
+            Text("Your AI Scientific Conference Companion")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .offset(y: appearAnimation ? 0 : 10)
+                .opacity(appearAnimation ? 1.0 : 0.0)
+
             Text(appVersion)
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.black.opacity(0.1))
+                .background(Color(.secondarySystemBackground))
                 .cornerRadius(12)
+                .padding(.top, 4)
                 .offset(y: appearAnimation ? 0 : 10)
                 .opacity(appearAnimation ? 1.0 : 0.0)
         }
-        .padding(.top, 0)
+        .padding(.top, 8)
         .padding(.bottom, 10)
     }
     
@@ -191,24 +155,32 @@ struct AboutView: View {
         VStack(spacing: 16) {
             featureCard(
                 icon: "doc.viewfinder",
-                title: "Scan Scientific Posters",
-                description: "Quickly capture and analyze research posters at conferences"
+                title: "Scan Posters",
+                description: "Capture a conference poster and pull out its key points in seconds"
             )
             .offset(x: showCards ? 0 : -30)
             .opacity(showCards ? 1.0 : 0.0)
-            
+
             featureCard(
-                icon: "brain.head.profile",
-                title: "AI-Powered Summaries",
-                description: "Generate concise summaries and questions for the author"
+                icon: "bubble.left.and.bubble.right.fill",
+                title: "Ask & Chat",
+                description: "Ask questions and chat with AI to dig into the findings"
             )
             .offset(x: showCards ? 0 : -30)
             .opacity(showCards ? 1.0 : 0.0)
-            
+
             featureCard(
-                icon: "square.and.arrow.down",
+                icon: "magnifyingglass",
+                title: "Explore the Research",
+                description: "See related papers and possible future research directions"
+            )
+            .offset(x: showCards ? 0 : -30)
+            .opacity(showCards ? 1.0 : 0.0)
+
+            featureCard(
+                icon: "square.and.arrow.up",
                 title: "Export & Share",
-                description: "Save and share insights with colleagues"
+                description: "Save as PDF and share insights with colleagues"
             )
             .offset(x: showCards ? 0 : -30)
             .opacity(showCards ? 1.0 : 0.0)
@@ -226,7 +198,7 @@ struct AboutView: View {
         VStack(spacing: 4) {
             Text("Support & Legal")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
                 .padding(.bottom, 8)
@@ -258,12 +230,11 @@ struct AboutView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.95))
-                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
+                .fill(Color(.secondarySystemBackground))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.5), lineWidth: 1.5)
+                .stroke(Color.gray.opacity(0.15), lineWidth: 1)
         )
         .padding(.horizontal)
         .offset(y: showLinks ? 0 : 20)
@@ -412,7 +383,7 @@ struct AboutView: View {
         VStack(spacing: 4) {
             Text("More from PharmaTools.AI")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
                 .padding(.bottom, 8)
@@ -437,12 +408,11 @@ struct AboutView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.95))
-                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
+                .fill(Color(.secondarySystemBackground))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.5), lineWidth: 1.5)
+                .stroke(Color.gray.opacity(0.15), lineWidth: 1)
         )
         .padding(.horizontal)
         .offset(y: showMoreApps ? 0 : 30)
@@ -543,9 +513,9 @@ struct AboutView: View {
                     .opacity(showFooter ? 1.0 : 0.0)
             }
             
-            Text("© 2025 PharmaTools.AI")
+            Text("© 2026 PharmaTools.AI")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.secondary)
                 .opacity(showFooter ? 1.0 : 0.0)
         }
         .padding(.vertical, 16)
@@ -561,7 +531,7 @@ struct AboutView: View {
         }) {
             Text("Done")
                 .fontWeight(.semibold)
-                .foregroundColor(.white)
+                .foregroundColor(DesignSystem.Colors.brandBlue)
         }
     }
     
@@ -601,11 +571,10 @@ struct AboutView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.95))
-                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
+                .fill(Color(.secondarySystemBackground))
                 .overlay(
                     RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.5), lineWidth: 1.5)
+                        .stroke(Color.gray.opacity(0.15), lineWidth: 1)
                 )
         )
         .onTapGesture {
