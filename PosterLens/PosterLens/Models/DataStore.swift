@@ -152,19 +152,6 @@ class DataStore: ObservableObject {
         }
     }
     
-    // Export all scans as a JSON file
-    func exportScans() -> URL? {
-        return exportScansAsJSON(savedScans)
-    }
-    
-    // Export specific scans by their IDs
-    func exportScans(withIDs ids: [UUID]) -> URL? {
-        let scansToExport = savedScans.filter { scan in
-            ids.contains(scan.id)
-        }
-        return exportScansAsJSON(scansToExport)
-    }
-    
     // Export all scans as PDF files
     func exportScansAsPDF() -> [URL]? {
         return exportScansAsPDF(savedScans)
@@ -176,25 +163,6 @@ class DataStore: ObservableObject {
             ids.contains(scan.id)
         }
         return exportScansAsPDF(scansToExport)
-    }
-    
-    // Helper method to export an array of scans as JSON
-    private func exportScansAsJSON(_ scans: [PosterScan]) -> URL? {
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = .prettyPrinted
-            let data = try encoder.encode(scans)
-            
-            let fileManager = FileManager.default
-            let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-            let fileURL = documentsDirectory.appendingPathComponent("PosterLens_Scans.json")
-            
-            try data.write(to: fileURL)
-            return fileURL
-        } catch {
-            print("Failed to export scans as JSON: \(error.localizedDescription)")
-            return nil
-        }
     }
     
     // Helper method to export an array of scans as PDF files

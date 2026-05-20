@@ -25,7 +25,6 @@ struct ImprovedHistoryView: View {
     @EnvironmentObject private var dataStore: DataStore
     @State private var showingDeleteAlert = false
     @State private var showingExportSheet = false
-    @State private var exportURL: URL?
     @State private var exportURLs: [URL] = []
     @State private var gridColumns = [GridItem(.flexible(), spacing: 20)]
     @State private var isEditMode: EditMode = .inactive
@@ -39,7 +38,6 @@ struct ImprovedHistoryView: View {
     @State private var isSelectionMode = false
     @State private var selectedScanIDs = Set<UUID>()
     @State private var showingBatchDeleteAlert = false
-    @State private var showingExportOptions = false
 
     // Animation states
     @State private var scrollOffset: CGFloat = 0
@@ -227,16 +225,6 @@ struct ImprovedHistoryView: View {
                                     Label("Export All as PDF", systemImage: "doc.richtext")
                                 }
 
-                                Button(action: {
-                                    // Export all scans as JSON (legacy option)
-                                    exportURL = dataStore.exportScans()
-                                    if exportURL != nil {
-                                        showingExportSheet = true
-                                    }
-                                }) {
-                                    Label("Export All as JSON", systemImage: "square.and.arrow.up")
-                                }
-
                                 Divider()
 
                                 Button(role: .destructive, action: {
@@ -276,49 +264,14 @@ struct ImprovedHistoryView: View {
             } message: {
                 Text("This will permanently delete \(selectedScanIDs.count) selected scan\(selectedScanIDs.count == 1 ? "" : "s"). This action cannot be undone.")
             }
-            .actionSheet(isPresented: $showingExportOptions) {
-                ActionSheet(
-                    title: Text("Export Options"),
-                    message: Text("Choose an export format"),
-                    buttons: [
-                        .default(Text("Export as PDF")) {
-                            if let urls = dataStore.exportScansAsPDF(withIDs: Array(selectedScanIDs)) {
-                                exportURLs = urls
-                                showingExportSheet = true
-                                
-                                // Exit selection mode after export
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                    withAnimation {
-                                        isSelectionMode = false
-                                        selectedScanIDs.removeAll()
-                                    }
-                                }
-                            }
-                        },
-                        .default(Text("Export as JSON")) {
-                            exportURL = dataStore.exportScans(withIDs: Array(selectedScanIDs))
-                            if exportURL != nil {
-                                showingExportSheet = true
-                                
-                                // Exit selection mode after export
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                    withAnimation {
-                                        isSelectionMode = false
-                                        selectedScanIDs.removeAll()
-                                    }
-                                }
-                            }
-                        },
-                        .cancel()
-                    ]
-                )
-            }
             .sheet(isPresented: $showingExportSheet) {
-                if let url = exportURL {
-                    ShareSheet(items: [url])
-                } else if !exportURLs.isEmpty {
-                    ShareSheet(items: exportURLs)
+                Group {
+                    if !exportURLs.isEmpty {
+                        ShareSheet(items: exportURLs)
+                    }
                 }
+                .presentationDetents([.large])
+                .ignoresSafeArea()
             }
         }
     }
@@ -332,7 +285,16 @@ struct ImprovedHistoryView: View {
                 let feedbackGenerator = UIImpactFeedbackGenerator(style: .medium)
                 feedbackGenerator.impactOccurred()
                 
-                showingExportOptions = true
+                if let urls = dataStore.exportScansAsPDF(withIDs: Array(selectedScanIDs)) {
+                    exportURLs = urls
+                    showingExportSheet = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        withAnimation {
+                            isSelectionMode = false
+                            selectedScanIDs.removeAll()
+                        }
+                    }
+                }
             }) {
                 VStack {
                     Image(systemName: "square.and.arrow.up")
