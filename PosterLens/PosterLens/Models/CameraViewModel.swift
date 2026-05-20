@@ -87,8 +87,8 @@ class CameraViewModel: ObservableObject {
 
                 case .failure(let error):
                     print("❌ CameraViewModel received error: \(error.localizedDescription)")
-                    self.showingError = true
-                    self.errorMessage = "Summary generation failed: \(error.localizedDescription)"
+                    // Don't show an alarming alert: the scan is saved with its image and OCR
+                    // text, and the summary screen offers a graceful "Generate summary" retry.
 
                     // Create a basic scan with just the OCR text so we don't lose the data
                     // This allows users to at least see what was captured even if summary generation failed

@@ -53,9 +53,112 @@ struct SummaryView: View {
     @State private var titleDraft = ""
     @State private var isGeneratingCategories = false
     @State private var categoryGenMessage: String? = nil
+    @State private var isGeneratingSummary = false
+    @State private var summaryGenFailed = false
+
+    private let openAIService = OpenAIService()
 
     private var currentScan: PosterScan {
         dataStore.getScan(withID: scan.id) ?? scan
+    }
+
+    // A scan whose summary couldn't be generated (e.g. offline at capture time)
+    private var summaryNeedsGeneration: Bool {
+        let points = currentScan.summaryPoints
+        if points.isEmpty { return true }
+        return points.count == 1 && points[0].lowercased().contains("unable to generate summary")
+    }
+
+    // Retry card shown when a scan's summary couldn't be generated (offline at capture)
+    private var summaryRetryCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: summaryGenFailed ? "wifi.exclamationmark" : "doc.text.magnifyingglass")
+                    .font(.title2)
+                    .foregroundColor(summaryGenFailed ? .orange : DesignSystem.Colors.brandBlue)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Summary not generated yet")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text(summaryGenFailed
+                         ? "Still couldn't connect. Check your connection and try again."
+                         : "Your scan is saved. It looks like the summary couldn't be generated — you may have been offline.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Button(action: { generateSummary() }) {
+                HStack(spacing: 8) {
+                    if isGeneratingSummary {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                        Text("Generating summary…")
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Generate summary")
+                    }
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(DesignSystem.Colors.brandBlue)
+                .cornerRadius(12)
+            }
+            .disabled(isGeneratingSummary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+        .padding(.top, 8)
+    }
+
+    private func generateSummary() {
+        guard !isGeneratingSummary else { return }
+        HapticManager.shared.mediumImpact()
+        isGeneratingSummary = true
+        summaryGenFailed = false
+
+        let target = currentScan
+        openAIService.generateStructuredSummary(from: target.rawText) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let points):
+                    var updated = target
+                    updated.summaryPoints = points
+                    dataStore.saveScan(updated)
+                    isGeneratingSummary = false
+                    HapticManager.shared.success()
+
+                    // Now that we have a summary, extract categories too
+                    CategoryExtractionService.shared.extractCategories(from: target.rawText, summary: points) { catResult in
+                        if case .success(let categories) = catResult, !categories.isEmpty {
+                            DispatchQueue.main.async {
+                                var latest = dataStore.getScan(withID: target.id) ?? updated
+                                latest.categories = categories
+                                dataStore.saveScan(latest)
+                            }
+                        }
+                    }
+                case .failure:
+                    isGeneratingSummary = false
+                    summaryGenFailed = true
+                    HapticManager.shared.error()
+                }
+            }
+        }
     }
 
     // Generate-categories action shown when a poster has no research categories yet
@@ -191,6 +294,9 @@ struct SummaryView: View {
                     Text("Fix the title if it was read incorrectly.")
                 }
 
+                if summaryNeedsGeneration {
+                    summaryRetryCard
+                } else {
                 Text("Summary")
                     .font(.title2)
                     .fontWeight(.semibold)
@@ -237,6 +343,7 @@ struct SummaryView: View {
                 // Process summary points to extract headings and content
                 ForEach(processedSummaryPoints(), id: \.title) { point in
                     SummaryCardView(title: point.title, content: point.content)
+                }
                 }
 
                 NotesCard(

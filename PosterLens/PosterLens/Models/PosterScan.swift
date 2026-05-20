@@ -10,7 +10,7 @@ struct PosterScan: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     let rawText: String
-    let summaryPoints: [String]
+    var summaryPoints: [String]
     let date: Date
     var authorQuestions: [String]?
     var hasPermission: Bool
