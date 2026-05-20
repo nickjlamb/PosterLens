@@ -493,7 +493,7 @@ struct CameraView: View {
             recentSectionHeader
 
             VStack(spacing: 12) {
-                ForEach(dataStore.savedScans.sorted(by: { $0.date > $1.date }).prefix(4)) { scan in
+                ForEach(dataStore.savedScans.sorted(by: { $0.date > $1.date }).prefix(3)) { scan in
                     ScanCardView(scan: scan, isHorizontal: true)
                 }
             }

@@ -12,7 +12,7 @@ struct ContentView: View {
             TabView(selection: $selectedTab) {
                 CameraView()
                     .tabItem {
-                        Label("Scan", systemImage: "camera")
+                        Label("Scan", systemImage: "viewfinder")
                     }
                     .tag(0)
                 
@@ -44,8 +44,8 @@ struct ContentView: View {
                 let tabBarAppearance = UITabBarAppearance()
                 tabBarAppearance.configureWithOpaqueBackground()
 
-                // Make the tab bar more visible with a semi-transparent background
-                tabBarAppearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.9)
+                // Solid (non-transparent) footer so scrolling content doesn't bleed through
+                tabBarAppearance.backgroundColor = UIColor.systemBackground
 
                 // Add a subtle shadow for better visibility
                 tabBarAppearance.shadowColor = UIColor.black.withAlphaComponent(0.3)
