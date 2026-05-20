@@ -103,6 +103,62 @@ class PDFExportService {
                 yPosition += 20
             }
             
+            // Draw research categories if available
+            if let categories = scan.categories, !categories.isEmpty {
+                if yPosition > pageHeight - 150 {
+                    context.beginPage()
+                    yPosition = margin
+                }
+                yPosition = drawText("Research Categories", font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
+                yPosition += 10
+                for category in categories {
+                    let line = "• \(category.name) — \(category.type.rawValue)"
+                    yPosition = drawText(line, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
+                    yPosition += 5
+                }
+                yPosition += 20
+            }
+
+            // Draw research directions if available
+            if let directions = scan.researchContext?.futureDirections, !directions.isEmpty {
+                if yPosition > pageHeight - 150 {
+                    context.beginPage()
+                    yPosition = margin
+                }
+                yPosition = drawText("Research Directions", font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
+                yPosition += 10
+                for (index, direction) in directions.enumerated() {
+                    let bulletPoint = "• \(direction)"
+                    yPosition = drawText(bulletPoint, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
+                    if index < directions.count - 1 {
+                        yPosition += 5
+                    }
+                }
+                yPosition += 20
+            }
+
+            // Draw related research if available
+            if let papers = scan.researchContext?.literatureContext, !papers.isEmpty {
+                if yPosition > pageHeight - 150 {
+                    context.beginPage()
+                    yPosition = margin
+                }
+                yPosition = drawText("Related Research", font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
+                yPosition += 10
+                for (index, paper) in papers.enumerated() {
+                    if yPosition > pageHeight - 100 {
+                        context.beginPage()
+                        yPosition = margin
+                    }
+                    let bulletPoint = "• \(paper.formattedCitation)"
+                    yPosition = drawText(bulletPoint, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
+                    if index < papers.count - 1 {
+                        yPosition += 5
+                    }
+                }
+                yPosition += 20
+            }
+
             // Check if we need a new page for the full text
             if yPosition > pageHeight - 200 {
                 context.beginPage()
