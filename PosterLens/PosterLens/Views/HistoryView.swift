@@ -31,6 +31,10 @@ struct ImprovedHistoryView: View {
     @State private var isEditMode: EditMode = .inactive
     @State private var viewHeight: CGFloat = 0
 
+    // Search
+    @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
+
     // Selection mode states
     @State private var isSelectionMode = false
     @State private var selectedScanIDs = Set<UUID>()
@@ -86,12 +90,19 @@ struct ImprovedHistoryView: View {
                                 .offset(y: appeared ? 0 : 20)
                                 .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1), value: appeared)
                         } else {
-                            gridView
-                                .opacity(appeared ? 1 : 0)
-                                .animation(.easeOut(duration: 0.4).delay(0.1), value: appeared)
+                            searchField
+
+                            if isSearching && displayedScans.isEmpty {
+                                noResultsView
+                            } else {
+                                gridView
+                                    .opacity(appeared ? 1 : 0)
+                                    .animation(.easeOut(duration: 0.4).delay(0.1), value: appeared)
+                            }
                         }
                     }
                     .coordinateSpace(name: "scrollSpace")
+                    .scrollDismissesKeyboard(.immediately)
                     .onPreferenceChange(ScrollOffsetKey.self) { offset in
                         scrollOffset = offset
                     }
@@ -119,6 +130,12 @@ struct ImprovedHistoryView: View {
             .toolbarBackground(Color(.systemBackground), for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
+                // Dismiss-keyboard button shown above the keyboard while searching
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { searchFocused = false }
+                }
+
                 // Leading items (left side)
                 ToolbarItem(placement: .navigationBarLeading) {
                     if isSelectionMode {
@@ -140,14 +157,14 @@ struct ImprovedHistoryView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 12) {
                         if isSelectionMode {
-                            Button(selectedScanIDs.count == dataStore.savedScans.count ? "Deselect All" : "Select All") {
+                            let visibleIDs = Set(displayedScans.map { $0.id })
+                            let allVisibleSelected = !visibleIDs.isEmpty && visibleIDs.isSubset(of: selectedScanIDs)
+                            Button(allVisibleSelected ? "Deselect All" : "Select All") {
                                 withAnimation {
-                                    if selectedScanIDs.count == dataStore.savedScans.count {
-                                        // Deselect all
-                                        selectedScanIDs.removeAll()
+                                    if allVisibleSelected {
+                                        selectedScanIDs.subtract(visibleIDs)
                                     } else {
-                                        // Select all
-                                        selectedScanIDs = Set(dataStore.savedScans.map { $0.id })
+                                        selectedScanIDs.formUnion(visibleIDs)
                                     }
                                 }
                             }
@@ -392,9 +409,74 @@ struct ImprovedHistoryView: View {
     }
     
     // Grid view for displaying scans
+    // Scans after applying the search query, most recent first
+    private var displayedScans: [PosterScan] {
+        let sorted = dataStore.savedScans.sorted(by: { $0.date > $1.date })
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return sorted }
+        return sorted.filter { scan in
+            scan.title.lowercased().contains(query)
+                || (scan.userNotes ?? "").lowercased().contains(query)
+                || (scan.categories?.contains(where: { $0.name.lowercased().contains(query) }) ?? false)
+        }
+    }
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // Search field shown above the grid
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+
+            TextField("Search title, notes, or category", text: $searchText)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.search)
+                .focused($searchFocused)
+                .onSubmit { searchFocused = false }
+
+            if !searchText.isEmpty {
+                Button(action: { searchText = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.secondarySystemBackground))
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    // Shown when a search returns no matches
+    private var noResultsView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 44))
+                .foregroundColor(.secondary.opacity(0.5))
+            Text("No matching scans")
+                .font(.headline)
+                .foregroundColor(.primary)
+            Text("No scans match \u{201C}\(searchText)\u{201D}.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 60)
+        .padding(.horizontal, 32)
+    }
+
     private var gridView: some View {
         LazyVGrid(columns: gridColumns, spacing: 16) {
-            ForEach(Array(dataStore.savedScans.sorted(by: { $0.date > $1.date }).enumerated()), id: \.element.id) { index, scan in
+            ForEach(Array(displayedScans.enumerated()), id: \.element.id) { index, scan in
                 if isEditMode.isEditing && !isSelectionMode {
                     // Edit mode for deletion (original functionality)
                     ScanCardView(scan: scan, isHorizontal: gridColumns.count == 1)
@@ -434,8 +516,8 @@ struct ImprovedHistoryView: View {
                 }
             }
             
-            // Add placeholders to fill the screen
-            ForEach(0..<calculatePlaceholderCount(), id: \.self) { index in
+            // Add placeholders to fill the screen (not while searching)
+            ForEach(0..<(isSearching ? 0 : calculatePlaceholderCount()), id: \.self) { index in
                 PlaceholderCardView(onTap: {
                     // First switch to camera tab
                     selectedTab?.wrappedValue = 0
