@@ -59,18 +59,10 @@ struct ImprovedHistoryView: View {
         NavigationView {
             GeometryReader { geometry in
                 ZStack(alignment: .bottom) {
-                    // Blue gradient background that matches AboutView and CameraView
-                    ZStack {
-                        DesignSystem.Colors.brandGradient
-                            .ignoresSafeArea()
-                            
-                        // Add decorative background circles with parallax effect
-                        DesignSystem.Colors.decorativeBackgroundCircles()
-                            .offset(y: scrollOffset * 0.3) // Parallax effect based on scroll
-                            .animation(.interpolatingSpring(stiffness: 50, damping: 80), value: scrollOffset)
-                            .zIndex(0)
-                    }
-                    
+                    // Clean white background
+                    Color(.systemBackground)
+                        .ignoresSafeArea()
+
                     ScrollView {
                         // Geometry reader to track scroll position
                         GeometryReader { scrollGeo in
@@ -78,7 +70,17 @@ struct ImprovedHistoryView: View {
                                                   value: scrollGeo.frame(in: .named("scrollSpace")).minY)
                         }
                         .frame(height: 0)
-                        
+
+                        // Large dark left-aligned title (native iOS pattern)
+                        HStack {
+                            Text(isSelectionMode ? "\(selectedScanIDs.count) Selected" : "Scan History")
+                                .font(.largeTitle.bold())
+                                .foregroundColor(.primary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+
                         if dataStore.savedScans.isEmpty {
                             emptyStateView
                                 .opacity(appeared ? 1 : 0)
@@ -113,10 +115,10 @@ struct ImprovedHistoryView: View {
                     }
                 }
             }
-            .navigationTitle(isSelectionMode ? "\(selectedScanIDs.count) Selected" : "Scan History")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.clear, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 // Leading items (left side)
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -237,7 +239,7 @@ struct ImprovedHistoryView: View {
                             } label: {
                                 Image(systemName: "ellipsis.circle")
                                     .imageScale(.large)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(DesignSystem.Colors.brandBlue)
                             }
                         }
                     }
@@ -530,21 +532,20 @@ struct ImprovedHistoryView: View {
             // Icon with subtle floating animation
             Image(systemName: "doc.text.image")
                 .font(.system(size: 70))
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(.secondary.opacity(0.5))
                 .modifier(FloatingAnimation(duration: 4, offset: 8))
-                .shadow(color: .white.opacity(0.2), radius: 10, x: 0, y: 5)
-            
+
             // Title with staggered animation
             Text("No Scans Yet")
                 .font(.title2)
                 .fontWeight(.medium)
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .transition(.opacity.combined(with: .move(edge: .top)))
-            
+
             // Description text
             Text("Tap the camera tab to scan your first scientific poster")
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
                 .transition(.opacity.combined(with: .scale))

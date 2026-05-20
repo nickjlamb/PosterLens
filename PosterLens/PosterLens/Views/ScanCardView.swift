@@ -287,13 +287,18 @@ struct PlaceholderCardView: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.15))
+                .fill(Color(.secondarySystemBackground))
                 .frame(height: 180)
-            
-            VStack {
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                        .foregroundColor(Color.gray.opacity(0.3))
+                )
+
+            VStack(spacing: 6) {
                 Image(systemName: "plus.circle")
                     .font(.system(size: 24))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(.secondary)
                     // Add subtle pulsing animation to draw attention
                     .scaleEffect(isPressed ? 0.9 : 1.0)
                     .animation(
@@ -301,14 +306,13 @@ struct PlaceholderCardView: View {
                             .repeatCount(1, autoreverses: true),
                         value: isPressed
                     )
-                
+
                 Text("Scan a Poster")
                     .font(.caption)
                     .fontWeight(.medium) // Make text slightly bolder
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(.secondary)
             }
         }
-        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
         // Make the entire card tappable - UX: Use HapticManager
         .onTapGesture {
             // UX: Use HapticManager for consistent feedback
