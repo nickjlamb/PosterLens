@@ -25,19 +25,19 @@ class CategoryExtractionService {
 
     private func createCategoryExtractionPrompt(rawText: String, summary: [String]) -> String {
         return """
-        Analyze this scientific poster and extract relevant research categories. Return the categories in a structured JSON format.
+        Analyze this scientific or medical conference poster and extract relevant research categories as a structured JSON object. The poster could be from any field — do NOT assume oncology or any specific discipline.
 
         CATEGORY TYPES:
-        1. Cancer Types: Specific cancer types mentioned (e.g., "Lung Cancer", "Breast Cancer")
-        2. Research Focus: Main research objectives (e.g., "Quality of Life", "Biomarkers", "Treatment Efficacy")
-        3. Research Phases: Clinical trial phases or study type (e.g., "Phase II", "Phase III", "Meta-Analysis")
-        4. Treatment Modalities: Types of treatments studied (e.g., "Chemotherapy", "Immunotherapy", "Targeted Therapy")
+        1. Field: the discipline, subject area, or condition studied (e.g., "Oncology", "Cardiology", "Type 2 Diabetes", "Machine Learning", "Climate Science", "Neuroscience")
+        2. Research Focus: the main objectives or topics (e.g., "Biomarkers", "Quality of Life", "Drug Efficacy", "Model Accuracy", "Prevalence")
+        3. Methods: key methods, techniques, or interventions used (e.g., "Randomized Controlled Trial", "Immunotherapy", "Deep Learning", "Mass Spectrometry", "Surgery")
+        4. Study Type: the study design or stage (e.g., "Phase III", "Meta-Analysis", "Cohort Study", "In Vitro", "Systematic Review", "Preclinical")
 
         INSTRUCTIONS:
-        - Extract 1-3 categories per type (if applicable)
-        - Use standardized terminology from oncology research
-        - If a category type is not applicable, omit it from the response
-        - Be specific but concise (e.g., "Non-Small Cell Lung Cancer" → "Lung Cancer")
+        - Extract 1-3 items per type, only where clearly applicable
+        - Use standard terminology appropriate to the poster's own field
+        - Each item MUST be a short label of 1-3 words (max ~25 characters) — a tag, NOT a description or sentence. For example use "Treatment Efficacy", never "Efficacy Assessment of Tislelizumab in neoadjuvant treatment"
+        - Omit any type that does not apply to this poster
 
         POSTER SUMMARY:
         \(summary.joined(separator: "\n"))
@@ -45,15 +45,13 @@ class CategoryExtractionService {
         POSTER TEXT SAMPLE:
         \(rawText.prefix(2000))
 
-        Return ONLY a JSON object in this exact format:
+        Return ONLY a JSON object in this exact format (omit any inapplicable key):
         {
-          "cancerTypes": ["Cancer Type 1", "Cancer Type 2"],
-          "researchFocus": ["Focus Area 1", "Focus Area 2"],
-          "researchPhases": ["Phase 1"],
-          "treatmentModalities": ["Modality 1", "Modality 2"]
+          "field": ["Field 1"],
+          "researchFocus": ["Focus 1", "Focus 2"],
+          "methods": ["Method 1", "Method 2"],
+          "studyType": ["Study Type 1"]
         }
-
-        Omit any category type that is not applicable to this poster.
         """
     }
 
@@ -69,31 +67,39 @@ class CategoryExtractionService {
         do {
             let json = try JSONSerialization.jsonObject(with: jsonData) as? [String: [String]] ?? [:]
 
-            // Parse cancer types
-            if let cancerTypes = json["cancerTypes"] {
-                for name in cancerTypes.prefix(3) { // Limit to 3
-                    categories.append(PosterCategory(type: .cancerType, name: name))
+            // Parse field
+            if let field = json["field"] {
+                for name in field.prefix(3) {
+                    if let clean = cleanCategoryName(name) {
+                        categories.append(PosterCategory(type: .field, name: clean))
+                    }
                 }
             }
 
             // Parse research focus
             if let researchFocus = json["researchFocus"] {
                 for name in researchFocus.prefix(3) {
-                    categories.append(PosterCategory(type: .researchFocus, name: name))
+                    if let clean = cleanCategoryName(name) {
+                        categories.append(PosterCategory(type: .focus, name: clean))
+                    }
                 }
             }
 
-            // Parse research phases
-            if let researchPhases = json["researchPhases"] {
-                for name in researchPhases.prefix(2) { // Usually 1-2 phases
-                    categories.append(PosterCategory(type: .researchPhase, name: name))
+            // Parse methods
+            if let methods = json["methods"] {
+                for name in methods.prefix(3) {
+                    if let clean = cleanCategoryName(name) {
+                        categories.append(PosterCategory(type: .methods, name: clean))
+                    }
                 }
             }
 
-            // Parse treatment modalities
-            if let treatmentModalities = json["treatmentModalities"] {
-                for name in treatmentModalities.prefix(3) {
-                    categories.append(PosterCategory(type: .treatmentModality, name: name))
+            // Parse study type
+            if let studyType = json["studyType"] {
+                for name in studyType.prefix(2) { // Usually 1-2
+                    if let clean = cleanCategoryName(name) {
+                        categories.append(PosterCategory(type: .studyType, name: clean))
+                    }
                 }
             }
 
@@ -102,6 +108,15 @@ class CategoryExtractionService {
         }
 
         return categories
+    }
+
+    /// Normalize a category name to a short tag; drop sentence-like values the model
+    /// occasionally returns instead of a concise label.
+    private func cleanCategoryName(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard trimmed.count <= 40 else { return nil }
+        return trimmed
     }
 
     private func extractJSON(from text: String) -> String? {

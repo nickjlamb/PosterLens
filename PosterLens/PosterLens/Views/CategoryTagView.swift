@@ -16,6 +16,8 @@ struct CategoryTagView: View {
             Text(category.name)
                 .font(.system(size: compact ? 11 : 12, weight: .medium))
                 .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: compact ? 130 : 180)
         }
         .padding(.horizontal, compact ? 6 : 8)
         .padding(.vertical, compact ? 3 : 5)
@@ -58,26 +60,26 @@ struct CategoryTagView_Previews: PreviewProvider {
     static var previews: some View {
         VStack(spacing: 20) {
             // Individual tags
-            CategoryTagView(category: PosterCategory(type: .cancerType, name: "Lung Cancer"))
-            CategoryTagView(category: PosterCategory(type: .researchFocus, name: "Quality of Life"))
-            CategoryTagView(category: PosterCategory(type: .researchPhase, name: "Phase II"))
-            CategoryTagView(category: PosterCategory(type: .treatmentModality, name: "Chemotherapy"))
+            CategoryTagView(category: PosterCategory(type: .field, name: "Oncology"))
+            CategoryTagView(category: PosterCategory(type: .focus, name: "Quality of Life"))
+            CategoryTagView(category: PosterCategory(type: .studyType, name: "Phase III"))
+            CategoryTagView(category: PosterCategory(type: .methods, name: "Immunotherapy"))
 
             Divider()
 
             // Tag row
             CategoryTagRow(categories: [
-                PosterCategory(type: .cancerType, name: "Lung Cancer"),
-                PosterCategory(type: .researchFocus, name: "Quality of Life"),
-                PosterCategory(type: .researchPhase, name: "Phase II"),
-                PosterCategory(type: .treatmentModality, name: "Chemotherapy")
+                PosterCategory(type: .field, name: "Oncology"),
+                PosterCategory(type: .focus, name: "Quality of Life"),
+                PosterCategory(type: .studyType, name: "Phase III"),
+                PosterCategory(type: .methods, name: "Immunotherapy")
             ])
 
             Divider()
 
             // Compact tags
-            CategoryTagView(category: PosterCategory(type: .cancerType, name: "Lung Cancer"), compact: true)
-            CategoryTagView(category: PosterCategory(type: .researchPhase, name: "Phase III"), showIcon: true)
+            CategoryTagView(category: PosterCategory(type: .field, name: "Oncology"), compact: true)
+            CategoryTagView(category: PosterCategory(type: .studyType, name: "Phase III"), showIcon: true)
         }
         .padding()
         .background(Color.gray.opacity(0.1))

@@ -181,13 +181,12 @@ struct CategoryDetailSheet_Previews: PreviewProvider {
             image: nil,
             date: Date(),
             categories: [
-                PosterCategory(type: .cancerType, name: "Lung Cancer"),
-                PosterCategory(type: .researchFocus, name: "Quality of Life"),
-                PosterCategory(type: .researchFocus, name: "Biomarkers"),
-                PosterCategory(type: .researchPhase, name: "Phase II"),
-                PosterCategory(type: .researchPhase, name: "Phase III"),
-                PosterCategory(type: .treatmentModality, name: "Chemotherapy"),
-                PosterCategory(type: .treatmentModality, name: "Immunotherapy")
+                PosterCategory(type: .field, name: "Oncology"),
+                PosterCategory(type: .focus, name: "Quality of Life"),
+                PosterCategory(type: .focus, name: "Biomarkers"),
+                PosterCategory(type: .studyType, name: "Phase III"),
+                PosterCategory(type: .methods, name: "Immunotherapy"),
+                PosterCategory(type: .methods, name: "Targeted Therapy")
             ]
         ))
     }
