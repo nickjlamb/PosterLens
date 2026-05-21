@@ -31,6 +31,14 @@ class DataStore: ObservableObject {
                 self?.saveConversations()
             }
             .store(in: &cancellables)
+
+        // Re-read the iCloud container when returning to the app, so scans made
+        // on another device show up (downloads happen via coordinated reads).
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .sink { [weak self] _ in
+                self?.loadSavedScans()
+            }
+            .store(in: &cancellables)
     }
     
     func saveScan(_ scan: PosterScan) {
@@ -46,12 +54,26 @@ class DataStore: ObservableObject {
     }
     
     func deleteScan(at offsets: IndexSet) {
+        let ids = offsets.map { savedScans[$0].id }
         savedScans.remove(atOffsets: offsets)
+        removeScanFiles(ids)
     }
-    
+
     func deleteScan(withID id: UUID) {
         if let index = savedScans.firstIndex(where: { $0.id == id }) {
             savedScans.remove(at: index)
+        }
+        removeScanFiles([id])
+    }
+
+    // Delete the on-disk files for the given scan IDs (explicit deletion so a
+    // transient empty reload can never mass-delete via the save-time prune)
+    private func removeScanFiles(_ ids: [UUID]) {
+        DispatchQueue.global(qos: .utility).async {
+            let dir = self.scansDirectoryURL()
+            for id in ids {
+                self.coordinatedRemove(self.scanFileURL(for: id, in: dir))
+            }
         }
     }
     
@@ -120,6 +142,18 @@ class DataStore: ObservableObject {
         if let coordError { print("File coordination error: \(coordError.localizedDescription)") }
     }
 
+    // Coordinated read; for an iCloud item this triggers a download and waits
+    // until the latest version is available locally before reading.
+    nonisolated private func coordinatedRead(_ url: URL) -> Data? {
+        var result: Data?
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        coordinator.coordinate(readingItemAt: url, options: [], error: &coordError) { readURL in
+            result = try? Data(contentsOf: readURL)
+        }
+        return result
+    }
+
     nonisolated private func coordinatedRemove(_ url: URL) {
         let coordinator = NSFileCoordinator()
         var coordError: NSError?
@@ -143,7 +177,11 @@ class DataStore: ObservableObject {
                 }
             }
 
-            // Remove files for scans that no longer exist
+            // Prune files for scans that no longer exist — but ONLY when we have
+            // scans in memory. Deletions are handled explicitly elsewhere, so an
+            // empty in-memory set here means a failed/transient load, not a real
+            // "delete everything"; never mass-delete from that state.
+            guard !scansToSave.isEmpty else { return }
             let currentIDs = Set(scansToSave.map { $0.id.uuidString })
             for file in self.jsonFileURLs(in: dir) {
                 let fileID = file.deletingPathExtension().lastPathComponent
@@ -196,16 +234,25 @@ class DataStore: ObservableObject {
                 }
             }
 
-            // Load everything in the target directory
+            // Load everything in the target directory. A coordinated read pulls
+            // down iCloud items on demand, so scans from another device appear.
+            let scanFiles = self.jsonFileURLs(in: targetDir)
             var loaded: [PosterScan] = []
-            for file in self.jsonFileURLs(in: targetDir) {
-                // Best-effort: ensure iCloud items are downloaded before reading
-                try? fileManager.startDownloadingUbiquitousItem(at: file)
-                if let data = try? Data(contentsOf: file),
+            for file in scanFiles {
+                if let data = self.coordinatedRead(file),
                    let scan = try? decoder.decode(PosterScan.self, from: data) {
                     loaded.append(scan)
                 }
             }
+
+            // Safety: if files exist but none were readable (e.g. iCloud not ready
+            // yet on a foreground refresh), keep the current scans rather than
+            // clobbering them with an empty set.
+            if loaded.isEmpty && !scanFiles.isEmpty {
+                print("Scan files present but none readable yet; keeping current scans")
+                return
+            }
+
             let sorted = loaded.sorted(by: { $0.date > $1.date })
             DispatchQueue.main.async {
                 self.savedScans = sorted
