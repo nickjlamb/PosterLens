@@ -55,6 +55,7 @@ struct SummaryView: View {
     @State private var categoryGenMessage: String? = nil
     @State private var isGeneratingSummary = false
     @State private var summaryGenFailed = false
+    @State private var showingShareSheet = false
 
     private let openAIService = OpenAIService()
 
@@ -425,6 +426,29 @@ struct SummaryView: View {
         }
         .navigationTitle("Poster Summary")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    HapticManager.shared.mediumImpact()
+                    showingShareSheet = true
+                }) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel("Share this poster")
+            }
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            Group {
+                if let pdfURLs = dataStore.exportScansAsPDF(withIDs: [currentScan.id]), !pdfURLs.isEmpty {
+                    CustomShareSheet(items: pdfURLs)
+                } else {
+                    let text = "Poster: \(currentScan.title)\n\nSummary:\n" + currentScan.summaryPoints.joined(separator: "\n\n")
+                    CustomShareSheet(items: [text])
+                }
+            }
+            .presentationDetents([.large])
+            .ignoresSafeArea()
+        }
         .alert("Error", isPresented: $showingError) {
             Button("OK", role: .cancel) {}
         } message: {
