@@ -73,81 +73,124 @@ class DataStore: ObservableObject {
         return documentsDirectory.appendingPathComponent("PosterLensScans.json")
     }
     
-    // PERFORMANCE: Save scans to file on background queue
+    // Directory holding one JSON file per scan (foundation for iCloud sync)
+    nonisolated private func scansDirectoryURL() -> URL {
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = documentsDirectory.appendingPathComponent("scans", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    nonisolated private func scanFileURL(for id: UUID) -> URL {
+        return scansDirectoryURL().appendingPathComponent("\(id.uuidString).json")
+    }
+
+    // Write all current scans as per-scan files and prune files for deleted scans
     private func saveScans() {
         let scansToSave = savedScans  // Copy to avoid capturing self
 
-        // PERFORMANCE OPTIMIZATION: Move file I/O to background queue
         DispatchQueue.global(qos: .utility).async {
-            do {
-                let encoder = JSONEncoder()
-                let data = try encoder.encode(scansToSave)
+            let fileManager = FileManager.default
+            let dir = self.scansDirectoryURL()
+            let encoder = JSONEncoder()
 
-                // Save to file instead of UserDefaults to avoid size limit
-                try data.write(to: self.getScansFileURL())
-
-                // Store a flag in UserDefaults to indicate data has been migrated
-                UserDefaults.standard.set(true, forKey: "scansSavedToFile")
-
-                // Remove large data from UserDefaults if it exists
-                if UserDefaults.standard.object(forKey: self.saveKey) != nil {
-                    UserDefaults.standard.removeObject(forKey: self.saveKey)
-                    print("Removed large scan data from UserDefaults")
+            // Write each scan to its own file
+            for scan in scansToSave {
+                do {
+                    let data = try encoder.encode(scan)
+                    try data.write(to: self.scanFileURL(for: scan.id))
+                } catch {
+                    print("Failed to save scan \(scan.id): \(error.localizedDescription)")
                 }
-            } catch {
-                print("Failed to save scans: \(error.localizedDescription)")
+            }
+
+            // Remove files for scans that no longer exist
+            let currentIDs = Set(scansToSave.map { $0.id.uuidString })
+            if let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                for file in files where file.pathExtension == "json" {
+                    let fileID = file.deletingPathExtension().lastPathComponent
+                    if !currentIDs.contains(fileID) {
+                        try? fileManager.removeItem(at: file)
+                    }
+                }
             }
         }
     }
-    
-    // PERFORMANCE: Load scans from file on background queue
-    private func loadSavedScans() {
-        let fileURL = getScansFileURL()
 
-        // PERFORMANCE OPTIMIZATION: Move file I/O to background queue
+    // Load scans from per-scan files, migrating legacy storage on first run
+    private func loadSavedScans() {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
-            let fileManager = FileManager.default  // Create inside closure to satisfy Sendable
+            let fileManager = FileManager.default
+            let dir = self.scansDirectoryURL()
+            let decoder = JSONDecoder()
 
-            // First, try to load from file
-            if fileManager.fileExists(atPath: fileURL.path) {
-                do {
-                    let data = try Data(contentsOf: fileURL)
-                    let decoder = JSONDecoder()
-                    let loadedScans = try decoder.decode([PosterScan].self, from: data)
-
-                    // Update on main thread
+            // 1) Load existing per-scan files, if any
+            if let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                let jsonFiles = files.filter { $0.pathExtension == "json" }
+                if !jsonFiles.isEmpty {
+                    var loaded: [PosterScan] = []
+                    for file in jsonFiles {
+                        if let data = try? Data(contentsOf: file),
+                           let scan = try? decoder.decode(PosterScan.self, from: data) {
+                            loaded.append(scan)
+                        }
+                    }
+                    let sorted = loaded.sorted(by: { $0.date > $1.date })
                     DispatchQueue.main.async {
-                        self.savedScans = loadedScans
-                        print("Successfully loaded scans from file")
+                        self.savedScans = sorted
+                        print("Loaded \(sorted.count) scans from per-scan files")
                     }
                     return
-                } catch {
-                    print("Failed to load saved scans from file: \(error.localizedDescription)")
                 }
             }
 
-            // If file doesn't exist or loading failed, try to load from UserDefaults (migration path)
-            if let data = UserDefaults.standard.data(forKey: self.saveKey) {
-                do {
-                    let decoder = JSONDecoder()
-                    let loadedScans = try decoder.decode([PosterScan].self, from: data)
+            // 2) Migrate from the legacy single JSON file
+            let legacyURL = self.getScansFileURL()
+            if fileManager.fileExists(atPath: legacyURL.path),
+               let data = try? Data(contentsOf: legacyURL),
+               let legacyScans = try? decoder.decode([PosterScan].self, from: data) {
+                self.writeScanFiles(legacyScans)
+                // Keep the legacy file as a backup rather than deleting it
+                let backupURL = legacyURL.appendingPathExtension("bak")
+                try? fileManager.removeItem(at: backupURL)
+                try? fileManager.moveItem(at: legacyURL, to: backupURL)
 
-                    // Update on main thread
-                    DispatchQueue.main.async {
-                        self.savedScans = loadedScans
-                        print("Successfully loaded scans from UserDefaults, will migrate to file")
-
-                        // Migrate to file storage
-                        self.saveScans()
-                    }
-                } catch {
-                    print("Failed to load saved scans from UserDefaults: \(error.localizedDescription)")
-
-                    // If loading fails, reset the saved data
-                    UserDefaults.standard.removeObject(forKey: self.saveKey)
+                let sorted = legacyScans.sorted(by: { $0.date > $1.date })
+                DispatchQueue.main.async {
+                    self.savedScans = sorted
+                    print("Migrated \(sorted.count) scans from legacy file to per-scan files")
                 }
+                return
+            }
+
+            // 3) Migrate from UserDefaults (older path)
+            if let data = UserDefaults.standard.data(forKey: self.saveKey),
+               let legacyScans = try? decoder.decode([PosterScan].self, from: data) {
+                self.writeScanFiles(legacyScans)
+                UserDefaults.standard.removeObject(forKey: self.saveKey)
+                let sorted = legacyScans.sorted(by: { $0.date > $1.date })
+                DispatchQueue.main.async {
+                    self.savedScans = sorted
+                    print("Migrated \(sorted.count) scans from UserDefaults to per-scan files")
+                }
+                return
+            }
+
+            // 4) New user — nothing to load
+            DispatchQueue.main.async {
+                self.savedScans = []
+            }
+        }
+    }
+
+    // Write the given scans to per-scan files (used during migration)
+    nonisolated private func writeScanFiles(_ scans: [PosterScan]) {
+        let encoder = JSONEncoder()
+        for scan in scans {
+            if let data = try? encoder.encode(scan) {
+                try? data.write(to: scanFileURL(for: scan.id))
             }
         }
     }
@@ -228,11 +271,18 @@ class DataStore: ObservableObject {
         do {
             let fileManager = FileManager.default
             
-            // Remove scans file
+            // Remove per-scan files directory
+            let scansDir = scansDirectoryURL()
+            if fileManager.fileExists(atPath: scansDir.path) {
+                try fileManager.removeItem(at: scansDir)
+                print("Removed per-scan files directory")
+            }
+
+            // Remove legacy scans file if present
             let scansFileURL = getScansFileURL()
             if fileManager.fileExists(atPath: scansFileURL.path) {
                 try fileManager.removeItem(at: scansFileURL)
-                print("Removed saved scans file")
+                print("Removed legacy scans file")
             }
             
             // Remove conversations file
