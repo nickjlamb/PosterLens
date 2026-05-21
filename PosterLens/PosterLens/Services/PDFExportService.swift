@@ -69,51 +69,52 @@ class PDFExportService {
                 yPosition += imageHeight + 20
             }
             
-            // Draw summary points
-            yPosition = drawText("Summary", font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
-            yPosition += 10
-            
-            for (index, point) in scan.summaryPoints.enumerated() {
-                let bulletPoint = "• \(point)"
-                yPosition = drawText(bulletPoint, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
-                
-                // Add spacing between points
-                if index < scan.summaryPoints.count - 1 {
-                    yPosition += 5
-                }
-            }
-            
-            yPosition += 20
-            
-            // Draw author questions if available
-            if let questions = scan.authorQuestions, !questions.isEmpty {
-                yPosition = drawText("Questions for the Author", font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
-                yPosition += 10
-                
-                for (index, question) in questions.enumerated() {
-                    let bulletPoint = "• \(question)"
-                    yPosition = drawText(bulletPoint, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
-                    
-                    // Add spacing between questions
-                    if index < questions.count - 1 {
-                        yPosition += 5
-                    }
-                }
-                
-                yPosition += 20
-            }
-            
-            // Draw research categories if available
-            if let categories = scan.categories, !categories.isEmpty {
-                if yPosition > pageHeight - 150 {
+            // Pagination helpers: start a new page when content won't fit, measuring
+            // each piece of text first so nothing overlaps at the page bottom.
+            let headingWidth = pageWidth - margin * 2
+            let bulletWidth = pageWidth - (margin + 10) * 2
+
+            func ensureSpace(_ needed: CGFloat) {
+                if yPosition + needed > pageHeight - margin {
                     context.beginPage()
                     yPosition = margin
                 }
-                yPosition = drawText("Research Categories", font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
+            }
+            func drawHeading(_ text: String) {
+                let h = textHeight(text, font: headingFont, width: headingWidth)
+                ensureSpace(h + 30) // keep the heading with at least one line below it
+                yPosition = drawText(text, font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
                 yPosition += 10
+            }
+            func drawBullet(_ text: String) {
+                let h = textHeight(text, font: bodyFont, width: bulletWidth)
+                ensureSpace(h)
+                yPosition = drawText(text, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
+            }
+
+            // Draw summary points
+            drawHeading("Summary")
+            for (index, point) in scan.summaryPoints.enumerated() {
+                drawBullet("• \(point)")
+                if index < scan.summaryPoints.count - 1 { yPosition += 5 }
+            }
+            yPosition += 20
+
+            // Draw author questions if available
+            if let questions = scan.authorQuestions, !questions.isEmpty {
+                drawHeading("Questions for the Author")
+                for (index, question) in questions.enumerated() {
+                    drawBullet("• \(question)")
+                    if index < questions.count - 1 { yPosition += 5 }
+                }
+                yPosition += 20
+            }
+
+            // Draw research categories if available
+            if let categories = scan.categories, !categories.isEmpty {
+                drawHeading("Research Categories")
                 for category in categories {
-                    let line = "• \(category.name) — \(category.type.rawValue)"
-                    yPosition = drawText(line, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
+                    drawBullet("• \(category.name) — \(category.type.rawValue)")
                     yPosition += 5
                 }
                 yPosition += 20
@@ -121,40 +122,20 @@ class PDFExportService {
 
             // Draw research directions if available
             if let directions = scan.researchContext?.futureDirections, !directions.isEmpty {
-                if yPosition > pageHeight - 150 {
-                    context.beginPage()
-                    yPosition = margin
-                }
-                yPosition = drawText("Research Directions", font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
-                yPosition += 10
+                drawHeading("Research Directions")
                 for (index, direction) in directions.enumerated() {
-                    let bulletPoint = "• \(direction)"
-                    yPosition = drawText(bulletPoint, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
-                    if index < directions.count - 1 {
-                        yPosition += 5
-                    }
+                    drawBullet("• \(direction)")
+                    if index < directions.count - 1 { yPosition += 5 }
                 }
                 yPosition += 20
             }
 
             // Draw related research if available
             if let papers = scan.researchContext?.literatureContext, !papers.isEmpty {
-                if yPosition > pageHeight - 150 {
-                    context.beginPage()
-                    yPosition = margin
-                }
-                yPosition = drawText("Related Research", font: headingFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin)
-                yPosition += 10
+                drawHeading("Related Research")
                 for (index, paper) in papers.enumerated() {
-                    if yPosition > pageHeight - 100 {
-                        context.beginPage()
-                        yPosition = margin
-                    }
-                    let bulletPoint = "• \(paper.formattedCitation)"
-                    yPosition = drawText(bulletPoint, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
-                    if index < papers.count - 1 {
-                        yPosition += 5
-                    }
+                    drawBullet("• \(paper.formattedCitation)")
+                    if index < papers.count - 1 { yPosition += 5 }
                 }
                 yPosition += 20
             }
@@ -177,6 +158,18 @@ class PDFExportService {
         return data
     }
     
+    // Measure the height a string will occupy when wrapped to the given width
+    private static func textHeight(_ text: String, font: UIFont, width: CGFloat) -> CGFloat {
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        let boundingRect = (text as NSString).boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes,
+            context: nil
+        )
+        return ceil(boundingRect.height)
+    }
+
     // Helper function to draw text with proper wrapping
     private static func drawText(_ text: String, font: UIFont, textColor: UIColor, rect: CGRect, yPosition: CGFloat, margin: CGFloat) -> CGFloat {
         let textAttributes: [NSAttributedString.Key: Any] = [
