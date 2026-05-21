@@ -73,7 +73,25 @@ class PDFExportService {
             // each piece of text first so nothing overlaps at the page bottom.
             let headingWidth = pageWidth - margin * 2
             let bulletWidth = pageWidth - (margin + 10) * 2
+            let bodyBoldFont = UIFont.systemFont(ofSize: 12, weight: .semibold)
 
+            // Convert simple **bold** markdown into an attributed string with real bold runs
+            func boldAttributed(_ text: String) -> NSAttributedString {
+                let result = NSMutableAttributedString()
+                let parts = text.components(separatedBy: "**")
+                for (i, part) in parts.enumerated() where !part.isEmpty {
+                    let font = (i % 2 == 1) ? bodyBoldFont : bodyFont
+                    result.append(NSAttributedString(string: part, attributes: [.font: font, .foregroundColor: textColor]))
+                }
+                return result
+            }
+            func measuredHeight(_ attributed: NSAttributedString, width: CGFloat) -> CGFloat {
+                ceil(attributed.boundingRect(
+                    with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    context: nil
+                ).height)
+            }
             func ensureSpace(_ needed: CGFloat) {
                 if yPosition + needed > pageHeight - margin {
                     context.beginPage()
@@ -87,9 +105,11 @@ class PDFExportService {
                 yPosition += 10
             }
             func drawBullet(_ text: String) {
-                let h = textHeight(text, font: bodyFont, width: bulletWidth)
+                let attributed = boldAttributed(text)
+                let h = measuredHeight(attributed, width: bulletWidth)
                 ensureSpace(h)
-                yPosition = drawText(text, font: bodyFont, textColor: textColor, rect: pageRect, yPosition: yPosition, margin: margin + 10)
+                drawAttributedText(attributed, rect: pageRect, yPosition: yPosition, margin: margin + 10)
+                yPosition += h + 5
             }
 
             // Draw summary points
@@ -158,6 +178,28 @@ class PDFExportService {
         return data
     }
     
+    // Draw a pre-built attributed string (used for markdown-rendered bullets)
+    private static func drawAttributedText(_ attributed: NSAttributedString, rect: CGRect, yPosition: CGFloat, margin: CGFloat) {
+        let textRect = CGRect(
+            x: margin,
+            y: yPosition,
+            width: rect.width - (margin * 2),
+            height: rect.height - yPosition - margin
+        )
+
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed)
+        let path = CGMutablePath()
+        path.addRect(textRect)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, attributed.length), path, nil)
+
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.translateBy(x: 0, y: textRect.origin.y * 2 + textRect.size.height)
+        context.scaleBy(x: 1.0, y: -1.0)
+        CTFrameDraw(frame, context)
+        context.scaleBy(x: 1.0, y: -1.0)
+        context.translateBy(x: 0, y: -(textRect.origin.y * 2 + textRect.size.height))
+    }
+
     // Measure the height a string will occupy when wrapped to the given width
     private static func textHeight(_ text: String, font: UIFont, width: CGFloat) -> CGFloat {
         let attributes: [NSAttributedString.Key: Any] = [.font: font]
