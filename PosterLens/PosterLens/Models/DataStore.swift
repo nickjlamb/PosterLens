@@ -73,16 +73,60 @@ class DataStore: ObservableObject {
         return documentsDirectory.appendingPathComponent("PosterLensScans.json")
     }
     
-    // Directory holding one JSON file per scan (foundation for iCloud sync)
-    nonisolated private func scansDirectoryURL() -> URL {
+    private nonisolated var iCloudContainerID: String { "iCloud.com.medcopywriter.PosterLens" }
+
+    // Always-local scans directory (migration source and fallback)
+    nonisolated private func localScansDirectoryURL() -> URL {
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let dir = documentsDirectory.appendingPathComponent("scans", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 
-    nonisolated private func scanFileURL(for id: UUID) -> URL {
-        return scansDirectoryURL().appendingPathComponent("\(id.uuidString).json")
+    // iCloud container scans directory, or nil if iCloud is unavailable.
+    // NOTE: url(forUbiquityContainerIdentifier:) blocks — only call off the main thread.
+    nonisolated private func iCloudScansDirectoryURL() -> URL? {
+        guard let container = FileManager.default.url(forUbiquityContainerIdentifier: iCloudContainerID) else {
+            return nil
+        }
+        let dir = container.appendingPathComponent("Documents", isDirectory: true)
+            .appendingPathComponent("scans", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    // The active scans directory: iCloud when available, otherwise local.
+    nonisolated private func scansDirectoryURL() -> URL {
+        return iCloudScansDirectoryURL() ?? localScansDirectoryURL()
+    }
+
+    nonisolated private func scanFileURL(for id: UUID, in dir: URL) -> URL {
+        return dir.appendingPathComponent("\(id.uuidString).json")
+    }
+
+    nonisolated private func jsonFileURLs(in dir: URL) -> [URL] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "json" }
+    }
+
+    // File-coordinated write/remove so iCloud doesn't see partial files
+    nonisolated private func coordinatedWrite(_ data: Data, to url: URL) {
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        coordinator.coordinate(writingItemAt: url, options: .forReplacing, error: &coordError) { writeURL in
+            do { try data.write(to: writeURL) }
+            catch { print("Coordinated write failed for \(url.lastPathComponent): \(error.localizedDescription)") }
+        }
+        if let coordError { print("File coordination error: \(coordError.localizedDescription)") }
+    }
+
+    nonisolated private func coordinatedRemove(_ url: URL) {
+        let coordinator = NSFileCoordinator()
+        var coordError: NSError?
+        coordinator.coordinate(writingItemAt: url, options: .forDeleting, error: &coordError) { deleteURL in
+            try? FileManager.default.removeItem(at: deleteURL)
+        }
+        if let coordError { print("File coordination (delete) error: \(coordError.localizedDescription)") }
     }
 
     // Write all current scans as per-scan files and prune files for deleted scans
@@ -90,107 +134,92 @@ class DataStore: ObservableObject {
         let scansToSave = savedScans  // Copy to avoid capturing self
 
         DispatchQueue.global(qos: .utility).async {
-            let fileManager = FileManager.default
             let dir = self.scansDirectoryURL()
             let encoder = JSONEncoder()
 
-            // Write each scan to its own file
             for scan in scansToSave {
-                do {
-                    let data = try encoder.encode(scan)
-                    try data.write(to: self.scanFileURL(for: scan.id))
-                } catch {
-                    print("Failed to save scan \(scan.id): \(error.localizedDescription)")
+                if let data = try? encoder.encode(scan) {
+                    self.coordinatedWrite(data, to: self.scanFileURL(for: scan.id, in: dir))
                 }
             }
 
             // Remove files for scans that no longer exist
             let currentIDs = Set(scansToSave.map { $0.id.uuidString })
-            if let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
-                for file in files where file.pathExtension == "json" {
-                    let fileID = file.deletingPathExtension().lastPathComponent
-                    if !currentIDs.contains(fileID) {
-                        try? fileManager.removeItem(at: file)
-                    }
+            for file in self.jsonFileURLs(in: dir) {
+                let fileID = file.deletingPathExtension().lastPathComponent
+                if !currentIDs.contains(fileID) {
+                    self.coordinatedRemove(file)
                 }
             }
         }
     }
 
-    // Load scans from per-scan files, migrating legacy storage on first run
+    // Load scans from per-scan files, seeding the active directory from local /
+    // legacy storage on first run (e.g. when iCloud is first enabled).
     private func loadSavedScans() {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
             let fileManager = FileManager.default
-            let dir = self.scansDirectoryURL()
             let decoder = JSONDecoder()
+            let targetDir = self.scansDirectoryURL()       // iCloud when available, else local
+            let localDir = self.localScansDirectoryURL()
 
-            // 1) Load existing per-scan files, if any
-            if let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
-                let jsonFiles = files.filter { $0.pathExtension == "json" }
-                if !jsonFiles.isEmpty {
-                    var loaded: [PosterScan] = []
-                    for file in jsonFiles {
-                        if let data = try? Data(contentsOf: file),
-                           let scan = try? decoder.decode(PosterScan.self, from: data) {
-                            loaded.append(scan)
+            // Seed the target directory if it has no scans yet
+            if self.jsonFileURLs(in: targetDir).isEmpty {
+                let localFiles = self.jsonFileURLs(in: localDir)
+                if targetDir != localDir, !localFiles.isEmpty {
+                    // Moving onto iCloud: copy existing local per-scan files into the container
+                    for file in localFiles {
+                        if let data = try? Data(contentsOf: file) {
+                            self.coordinatedWrite(data, to: targetDir.appendingPathComponent(file.lastPathComponent))
                         }
                     }
-                    let sorted = loaded.sorted(by: { $0.date > $1.date })
-                    DispatchQueue.main.async {
-                        self.savedScans = sorted
-                        print("Loaded \(sorted.count) scans from per-scan files")
+                    print("Seeded iCloud scans directory from \(localFiles.count) local files")
+                } else {
+                    // Migrate from the legacy single JSON file, then UserDefaults
+                    let legacyURL = self.getScansFileURL()
+                    if fileManager.fileExists(atPath: legacyURL.path),
+                       let data = try? Data(contentsOf: legacyURL),
+                       let legacyScans = try? decoder.decode([PosterScan].self, from: data) {
+                        self.writeScanFiles(legacyScans, to: targetDir)
+                        let backupURL = legacyURL.appendingPathExtension("bak")
+                        try? fileManager.removeItem(at: backupURL)
+                        try? fileManager.moveItem(at: legacyURL, to: backupURL)
+                        print("Migrated \(legacyScans.count) scans from legacy file")
+                    } else if let data = UserDefaults.standard.data(forKey: self.saveKey),
+                              let legacyScans = try? decoder.decode([PosterScan].self, from: data) {
+                        self.writeScanFiles(legacyScans, to: targetDir)
+                        UserDefaults.standard.removeObject(forKey: self.saveKey)
+                        print("Migrated \(legacyScans.count) scans from UserDefaults")
                     }
-                    return
                 }
             }
 
-            // 2) Migrate from the legacy single JSON file
-            let legacyURL = self.getScansFileURL()
-            if fileManager.fileExists(atPath: legacyURL.path),
-               let data = try? Data(contentsOf: legacyURL),
-               let legacyScans = try? decoder.decode([PosterScan].self, from: data) {
-                self.writeScanFiles(legacyScans)
-                // Keep the legacy file as a backup rather than deleting it
-                let backupURL = legacyURL.appendingPathExtension("bak")
-                try? fileManager.removeItem(at: backupURL)
-                try? fileManager.moveItem(at: legacyURL, to: backupURL)
-
-                let sorted = legacyScans.sorted(by: { $0.date > $1.date })
-                DispatchQueue.main.async {
-                    self.savedScans = sorted
-                    print("Migrated \(sorted.count) scans from legacy file to per-scan files")
+            // Load everything in the target directory
+            var loaded: [PosterScan] = []
+            for file in self.jsonFileURLs(in: targetDir) {
+                // Best-effort: ensure iCloud items are downloaded before reading
+                try? fileManager.startDownloadingUbiquitousItem(at: file)
+                if let data = try? Data(contentsOf: file),
+                   let scan = try? decoder.decode(PosterScan.self, from: data) {
+                    loaded.append(scan)
                 }
-                return
             }
-
-            // 3) Migrate from UserDefaults (older path)
-            if let data = UserDefaults.standard.data(forKey: self.saveKey),
-               let legacyScans = try? decoder.decode([PosterScan].self, from: data) {
-                self.writeScanFiles(legacyScans)
-                UserDefaults.standard.removeObject(forKey: self.saveKey)
-                let sorted = legacyScans.sorted(by: { $0.date > $1.date })
-                DispatchQueue.main.async {
-                    self.savedScans = sorted
-                    print("Migrated \(sorted.count) scans from UserDefaults to per-scan files")
-                }
-                return
-            }
-
-            // 4) New user — nothing to load
+            let sorted = loaded.sorted(by: { $0.date > $1.date })
             DispatchQueue.main.async {
-                self.savedScans = []
+                self.savedScans = sorted
+                print("Loaded \(sorted.count) scans from \(targetDir.path)")
             }
         }
     }
 
-    // Write the given scans to per-scan files (used during migration)
-    nonisolated private func writeScanFiles(_ scans: [PosterScan]) {
+    // Write the given scans to per-scan files in a specific directory (migration)
+    nonisolated private func writeScanFiles(_ scans: [PosterScan], to dir: URL) {
         let encoder = JSONEncoder()
         for scan in scans {
             if let data = try? encoder.encode(scan) {
-                try? data.write(to: scanFileURL(for: scan.id))
+                coordinatedWrite(data, to: scanFileURL(for: scan.id, in: dir))
             }
         }
     }
@@ -267,32 +296,24 @@ class DataStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: conversationsKey)
         UserDefaults.standard.removeObject(forKey: "conversationsSavedToFile")
         
-        // Remove the saved files
-        do {
+        // Remove the saved files off the main thread (the iCloud lookup blocks)
+        let conversationsFileURL = getConversationsFileURL()
+        DispatchQueue.global(qos: .utility).async {
             let fileManager = FileManager.default
-            
-            // Remove per-scan files directory
-            let scansDir = scansDirectoryURL()
-            if fileManager.fileExists(atPath: scansDir.path) {
-                try fileManager.removeItem(at: scansDir)
-                print("Removed per-scan files directory")
-            }
 
-            // Remove legacy scans file if present
-            let scansFileURL = getScansFileURL()
-            if fileManager.fileExists(atPath: scansFileURL.path) {
-                try fileManager.removeItem(at: scansFileURL)
-                print("Removed legacy scans file")
+            // Remove per-scan files (iCloud and local) and the legacy file
+            let scansDir = self.scansDirectoryURL()
+            try? fileManager.removeItem(at: scansDir)
+            let localDir = self.localScansDirectoryURL()
+            if localDir != scansDir {
+                try? fileManager.removeItem(at: localDir)
             }
-            
+            try? fileManager.removeItem(at: self.getScansFileURL())
+
             // Remove conversations file
-            let conversationsFileURL = getConversationsFileURL()
             if fileManager.fileExists(atPath: conversationsFileURL.path) {
-                try fileManager.removeItem(at: conversationsFileURL)
-                print("Removed saved conversations file")
+                try? fileManager.removeItem(at: conversationsFileURL)
             }
-        } catch {
-            print("Error deleting saved files: \(error.localizedDescription)")
         }
     }
     
