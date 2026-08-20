@@ -11,7 +11,7 @@ asking the presenter, and a shortlist of the real papers behind the work — in 
 from a single photo.
 
 [![App Store](https://img.shields.io/badge/App_Store-Download-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/app/posterlens)
-[![Perplexity Cookbook](https://img.shields.io/badge/Featured-Perplexity_Cookbook-20808D?logo=perplexity&logoColor=white)](https://docs.perplexity.ai/cookbook/showcase/posterlens)
+[![Perplexity Cookbook](https://img.shields.io/badge/Featured-Perplexity_Cookbook-20808D?logo=perplexity&logoColor=white)](https://docs.perplexity.ai/docs/cookbook/showcase/posterlens)
 [![Release](https://img.shields.io/github/v/release/nickjlamb/PosterLens?display_name=tag&color=2B73DE)](https://github.com/nickjlamb/PosterLens/releases)
 [![Platform](https://img.shields.io/badge/iOS-16.6%2B-black?logo=apple&logoColor=white)](https://www.apple.com/ios/)
 [![Swift](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)](https://swift.org)
@@ -220,7 +220,7 @@ PosterLens/
 
 Version **2.0** is live on the [App Store](https://apps.apple.com/app/posterlens).
 PosterLens is featured in the
-[Perplexity AI Cookbook](https://docs.perplexity.ai/cookbook/showcase/posterlens).
+[Perplexity AI Cookbook](https://docs.perplexity.ai/docs/cookbook/showcase/posterlens).
 
 Built and maintained by [Nick Lamb](https://github.com/nickjlamb) —
 one developer, shipping in public. Bug reports and feature ideas are genuinely welcome;
