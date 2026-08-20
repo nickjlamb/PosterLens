@@ -10,7 +10,7 @@ PosterLens turns a conference poster into a structured summary, a set of questio
 asking the presenter, and a shortlist of the real papers behind the work — in about a minute,
 from a single photo.
 
-[![App Store](https://img.shields.io/badge/App_Store-Download-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/app/posterlens)
+[![App Store](https://img.shields.io/badge/App_Store-Download-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/app/id6745453368)
 [![Perplexity Cookbook](https://img.shields.io/badge/Featured-Perplexity_Cookbook-20808D?logo=perplexity&logoColor=white)](https://docs.perplexity.ai/docs/cookbook/showcase/posterlens)
 [![Release](https://img.shields.io/github/v/release/nickjlamb/PosterLens?display_name=tag&color=2B73DE)](https://github.com/nickjlamb/PosterLens/releases)
 [![Platform](https://img.shields.io/badge/iOS-16.6%2B-black?logo=apple&logoColor=white)](https://www.apple.com/ios/)
@@ -218,7 +218,7 @@ PosterLens/
 
 ## Status
 
-Version **2.0** is live on the [App Store](https://apps.apple.com/app/posterlens).
+Version **2.0** is live on the [App Store](https://apps.apple.com/app/id6745453368).
 PosterLens is featured in the
 [Perplexity AI Cookbook](https://docs.perplexity.ai/docs/cookbook/showcase/posterlens).
 

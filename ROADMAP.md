@@ -57,9 +57,10 @@ anything else honestly.
 - **Compare two posters.** Scanning competing readouts from the same session and getting a
   structured diff — population, endpoint, effect size — is the thing conference-goers ask
   for most.
-- **Real iPad layout.** The app runs on iPad; it is not designed for it.
 - **Export beyond PDF.** Structured formats a reference manager or slide deck can ingest.
 - **Accessibility pass.** VoiceOver labelling and Dynamic Type through the whole flow.
+- **iPad refinements.** The split-view layout ships and works; multitasking and external
+  keyboard support are the gaps.
 - **Wire up the test target.** `PosterLensTests/` holds real tests for citation parsing,
   Vancouver formatting and query building, but no Xcode test target references them, so CI
   cannot run them. Small job, disproportionate payoff.

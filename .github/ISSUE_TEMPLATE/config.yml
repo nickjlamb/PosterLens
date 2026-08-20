@@ -3,9 +3,6 @@ contact_links:
   - name: Security vulnerability
     url: https://github.com/nickjlamb/PosterLens/blob/main/SECURITY.md
     about: Please report security issues privately by email, not as a public issue.
-  - name: Questions and ideas
-    url: https://github.com/nickjlamb/PosterLens/discussions
-    about: For open-ended questions and discussion.
   - name: App Store support
-    url: https://apps.apple.com/app/posterlens
+    url: https://apps.apple.com/app/id6745453368
     about: If you are a user of the app rather than a developer.
