@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- Xcode 15.0 or later
-- iOS 16.0 or later device or simulator
+- Xcode 16.0 or later (the project's base SDK is iOS 18.4)
+- An iOS 16.6 or later device or simulator
 - OpenAI API key (required for summarization and chat)
 - Perplexity API key (required for related research discovery)
 - Git installed
@@ -99,7 +99,7 @@ Point `Config.evidenceAPIURL` at your gateway and add the gateway key as `Eviden
 ## Troubleshooting
 
 - **Camera Access**: Make sure to grant camera permissions when prompted
-- **Build Errors**: Ensure you're using Xcode 15.0+ with Swift 5.7+
+- **Build Errors**: Ensure you're using Xcode 16.0+
 - **API Issues**: Verify your API keys are valid and have sufficient quota
 - **Missing Secrets.plist**: Create the file as described in step 3 above
 - **No Related Research**: Ensure your Perplexity API key is valid and has Search API access

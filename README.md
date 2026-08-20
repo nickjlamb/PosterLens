@@ -67,7 +67,7 @@ PosterLens is the step that photo was supposed to be.
 
 ## Quick start (60 seconds)
 
-You need Xcode 15+ and an OpenAI API key. Everything else is optional.
+You need Xcode 16+ and an OpenAI API key. Everything else is optional.
 
 ```bash
 git clone https://github.com/nickjlamb/PosterLens.git
