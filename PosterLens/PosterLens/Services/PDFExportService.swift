@@ -16,9 +16,12 @@ class PDFExportService {
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = pdfMetaData as [String: Any]
         
-        // Use A4 size for the PDF
-        let pageWidth = 8.27 * 72.0
-        let pageHeight = 11.69 * 72.0
+        // Use A4 size for the PDF.
+        // Annotated as CGFloat: every downstream use (CGRect, margins, yPosition)
+        // is CGFloat, and leaving these as Double makes the mixed arithmetic below
+        // ambiguous under stricter Swift type inference.
+        let pageWidth: CGFloat = 8.27 * 72.0
+        let pageHeight: CGFloat = 11.69 * 72.0
         let pageRect = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
         
         let renderer = UIGraphicsPDFRenderer(bounds: pageRect, format: format)
