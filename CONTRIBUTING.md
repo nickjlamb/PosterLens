@@ -130,6 +130,18 @@ The changelog is assembled from these, so a clear subject line pays for itself.
   or reconstructed. Clinicians read that field as if the poster said it, so it has to be
   something the poster actually said.
 
+## Releases
+
+Releases are cut from tags and their notes are extracted from `CHANGELOG.md`, so the
+changelog is the single source of truth and the two cannot drift:
+
+```bash
+./scripts/publish-releases.sh --dry-run   # preview
+./scripts/publish-releases.sh             # push tags, create GitHub Releases
+```
+
+Requires the [GitHub CLI](https://cli.github.com), authenticated.
+
 ## Code of conduct
 
 By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).

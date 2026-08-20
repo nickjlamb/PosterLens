@@ -91,7 +91,7 @@ retrieval pipeline.
 
 ---
 
-## [1.2.0] — 2025-10-16 · Build 4
+## [1.2.0] — 2025-10-19 · Build 4
 
 ### Added
 - **Related Research discovery** with PubMed integration and PMC support
