@@ -24,3 +24,12 @@ venv/
 # IDE
 .vscode/
 .idea/
+
+# Working scratch (never commit)
+_to_delete/
+
+# Local ingestion data dumps — regenerate with functions/ingestion/
+functions/ingestion/*.jsonl
+
+# Original App Store screenshot exports; the repo ships resized copies in docs/assets
+PosterLens screenshots/
