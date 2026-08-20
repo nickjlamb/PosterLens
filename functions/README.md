@@ -101,9 +101,15 @@ When BigQuery and Vertex AI are integrated, you'll need:
 --set-env-vars PROJECT_ID=your-project-id,DATASET_ID=pubmed_dataset
 ```
 
-## Roadmap
+## Status
 
-- [ ] Integrate BigQuery for paper metadata retrieval
-- [ ] Integrate Vertex AI for semantic search/embeddings
-- [ ] Add authentication
-- [ ] Add rate limiting
+- [x] BigQuery vector search over the PubMed corpus (`pubmed_rag.papers`)
+- [x] Vertex AI embeddings (`text-embedding-004`)
+- [x] Deterministic re-ranking — recency, keyword overlap, specificity
+- [x] `why_relevant` explanations per paper
+- [x] API gateway with key authentication and rate limiting
+- [ ] Corpus breadth beyond oncology and immunotherapy
+- [ ] Retrieval evaluation set with a tracked precision@k
+
+See [../ROADMAP.md](../ROADMAP.md) for the wider picture and
+[../docs/EXAMPLES.md](../docs/EXAMPLES.md) for request and response shapes.

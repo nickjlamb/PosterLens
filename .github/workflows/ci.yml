@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    name: Build iOS app
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install xcbeautify
+        run: brew install xcbeautify
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # Secrets.plist is gitignored and never committed. CI builds against the
+      # tracked template with empty values: the app compiles and launches, it
+      # just cannot reach any model provider. That is enough to catch build
+      # regressions, which is what this job is for.
+      - name: Create Secrets.plist from template
+        run: cp PosterLens/PosterLens/Secrets.example.plist PosterLens/PosterLens/Secrets.plist
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project PosterLens/PosterLens.xcodeproj \
+            -scheme PosterLens \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions
+
+  functions:
+    name: Cloud Function
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install tooling
+        run: pip install ruff
+
+      # Only real errors fail the build: syntax errors, undefined names.
+      # Style opinions stay out of CI on a single-maintainer project.
+      - name: Lint
+        run: ruff check --select E9,F63,F7,F82 functions/
+
+      - name: Byte-compile
+        run: python -m compileall -q functions/
+
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cheap belt-and-braces check. Secrets.plist is gitignored, but a
+      # --force push or a rename could slip one past; this fails loudly.
+      - name: No committed secrets
+        run: |
+          if git ls-files | grep -E '(^|/)Secrets\.plist$'; then
+            echo "::error::Secrets.plist is tracked. Remove it and rotate the keys."
+            exit 1
+          fi
+          echo "No Secrets.plist tracked."
+
+      - name: No hard-coded API keys
+        run: |
+          if git grep -nE '(sk-[A-Za-z0-9]{20,}|pplx-[A-Za-z0-9]{20,})' -- . ':!*.md'; then
+            echo "::error::A key-shaped string is committed. Rotate it immediately."
+            exit 1
+          fi
+          echo "No key-shaped strings found."
+
+      - name: Check documentation links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress --max-concurrency 4 --accept 200,206,429 './**/*.md'
+          fail: false

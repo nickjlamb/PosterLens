@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest something PosterLens should do
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [roadmap](../blob/main/ROADMAP.md) first — it lists what is planned,
+        and also what has been considered and deliberately not done, with reasons.
+
+  - type: textarea
+    id: moment
+    attributes:
+      label: The conference moment this solves
+      description: |
+        The most persuasive framing is the situation, not the implementation.
+      placeholder: Standing in front of two competing readouts in the same session, I need to know whether the populations are actually comparable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today
+      description: The workaround you currently use, and why it is not good enough.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app
+      options:
+        - Camera / capture
+        - Summary and extraction
+        - Chat
+        - Related research / citations
+        - Export and sharing
+        - History and organisation
+        - Backend / RAG pipeline
+        - Something else
+    validations:
+      required: true

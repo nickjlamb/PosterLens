@@ -1,0 +1,82 @@
+name: Bug report
+description: Something in the app does not work as it should
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        **Please do not paste API keys into this form**, even revoked ones.
+        If you have leaked a key, see [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you get instead?
+      placeholder: I scanned a poster and the summary was missing the primary endpoint, even though the poster stated one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app
+      options:
+        - Camera / capture
+        - OCR / text extraction
+        - Summary
+        - Categories
+        - Chat
+        - Related research / citations
+        - PDF export
+        - Scan history / iCloud sync
+        - Onboarding
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown on the About page
+      placeholder: "2.0 (8)"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and iOS version
+      placeholder: iPhone 15 Pro, iOS 18.4
+    validations:
+      required: true
+
+  - type: textarea
+    id: poster
+    attributes:
+      label: About the poster (if this is a scan problem)
+      description: |
+        If you can share the photo, attach it — crop or redact anything unpublished.
+        If you cannot, describe it: layout, column count, font size, glossy or matte,
+        lighting. Those are usually the variables that matter for OCR.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, screen recordings, console output.
