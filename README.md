@@ -119,55 +119,10 @@ into BigQuery. Point `Config.evidenceAPIURL` at your own gateway.
 Capture and OCR happen entirely on device. Only extracted text — never the photograph —
 is sent to any model.
 
-```mermaid
-flowchart TB
-    subgraph device["📱 On device — nothing leaves the phone"]
-        cam["Camera capture<br/><i>edge detection</i>"]
-        ocr["Vision framework<br/><i>OCR + scientific notation repair</i>"]
-        cam --> ocr
-    end
-
-    subgraph reason["☁️ Reasoning — extracted text only"]
-        sum["OpenAI GPT<br/><i>6-field structured summary</i>"]
-        cat["Category extraction<br/><i>colour-coded tags</i>"]
-        ctx["Author questions<br/>Research directions<br/>Grounded chat"]
-    end
-
-    subgraph evidence["🔬 Evidence — retrieval, then verification"]
-        direction TB
-        rag["Cloud Function: evidence_v2<br/><i>Vertex AI embeddings →<br/>BigQuery vector search → re-rank</i>"]
-        plx["Perplexity Search API<br/><i>legacy path, domain-filtered</i>"]
-        pm["PubMed E-utilities<br/><i>every citation validated</i>"]
-        rag --> pm
-        plx --> pm
-    end
-
-    subgraph out["💾 Output"]
-        store["Per-scan store<br/><i>iCloud + local fallback</i>"]
-        pdf["PDF export<br/><i>PDFKit</i>"]
-    end
-
-    ocr --> sum --> cat --> ctx
-    ocr -.->|"poster text"| rag
-    ocr -.->|"poster text"| plx
-    ctx --> store
-    pm --> store
-    store --> pdf
-
-    classDef d fill:#E8F0FE,stroke:#2B73DE,stroke-width:1px,color:#0B2440
-    classDef r fill:#EFE8FE,stroke:#7B4FD8,stroke-width:1px,color:#1B0B40
-    classDef e fill:#E6F6EE,stroke:#12885A,stroke-width:1px,color:#04301F
-    classDef o fill:#FFF3E0,stroke:#C77700,stroke-width:1px,color:#3A2300
-    class cam,ocr d
-    class sum,cat,ctx r
-    class rag,plx,pm e
-    class store,pdf o
-
-    style device fill:#F8FAFC,stroke:#C3CBD6,stroke-width:1px,color:#0B2440
-    style reason fill:#FBFAFE,stroke:#C9C0DE,stroke-width:1px,color:#1B0B40
-    style evidence fill:#F7FBF9,stroke:#B7D6C7,stroke-width:1px,color:#04301F
-    style out fill:#FDFAF5,stroke:#E0CFAE,stroke-width:1px,color:#3A2300
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img src="docs/assets/architecture-light.svg" alt="PosterLens architecture: capture and OCR run on device and only extracted text leaves the phone; reasoning produces a structured summary, categories, questions and chat; evidence retrieval runs over a PubMed corpus and every citation is validated against PubMed E-utilities — failures are dropped, never shown; results land in a per-scan store with PDF export." width="100%">
+</picture>
 
 Two design decisions do most of the work here.
 
