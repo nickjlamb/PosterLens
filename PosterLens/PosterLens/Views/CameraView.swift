@@ -282,31 +282,55 @@ struct CameraView: View {
     private var mainCameraView: some View {
         GeometryReader { geometry in
             let isLandscape = geometry.size.width > geometry.size.height
+            // Where the centre of the whole display falls in our coordinates. The system
+            // insets (e.g. the Duo's side toolbar) aren't symmetric, so the middle of our
+            // content area is not the middle of the screen, where the crease is.
+            let insets = geometry.safeAreaInsets
+            let creaseX = (geometry.size.width + insets.leading + insets.trailing) / 2 - insets.leading
+            let columnGap: CGFloat = 24
+            let sidePadding: CGFloat = 24
+            let leftColumnWidth = max(0, creaseX - sidePadding - columnGap / 2)
+            let rightColumnWidth = max(0, geometry.size.width - creaseX - sidePadding - columnGap / 2)
             
             ZStack {
                 if isLandscape {
-                    // Landscape layout - horizontal arrangement
-                    HStack(spacing: 20) {
-                        // Left side - camera card
-                        cameraScanCard
-                            .frame(width: geometry.size.width * 0.6)
-                            .offset(y: offsetY)
-                            .opacity(opacity)
-                        
-                        // Right side - recent scans
-                        if !dataStore.savedScans.isEmpty {
-                            VStack {
-                                Spacer()
-                                recentScansPreview(isLandscape: true)
-                                    .frame(width: geometry.size.width * 0.35)
-                                    .offset(y: offsetY)
-                                    .opacity(opacity)
-                                    .id(refreshID) // Force refresh when this ID changes
-                                Spacer()
+                    // Wide layout (landscape, iPad, unfolded iPhone Duo): two equal columns,
+                    // so the gap between them sits on the centre of the display (the Duo's crease).
+                    HStack(alignment: .top, spacing: columnGap) {
+                        // Left column - guidelines + camera card at their natural height
+                        ScrollView(showsIndicators: false) {
+                            VStack(alignment: .leading, spacing: 16) {
+                                scanningGuidelinesPill
+                                cameraScanCard
+                            }
+                            .padding(.top, 8)
+                            .padding(.bottom, 24)
+                        }
+                        .frame(width: leftColumnWidth)
+
+                        // Right column - recent scans, or how it works before the first scan
+                        Group {
+                            if !dataStore.savedScans.isEmpty {
+                                // Same detailed cards as portrait (title, date, findings)
+                                ScrollView(showsIndicators: false) {
+                                    recentScansPreview(isLandscape: false)
+                                        .padding(.top, 8)
+                                        .padding(.bottom, 24)
+                                        .id(refreshID) // Force refresh when this ID changes
+                                }
+                            } else {
+                                ScrollView(showsIndicators: false) {
+                                    howItWorksSection
+                                        .padding(.top, 8)
+                                        .padding(.bottom, 24)
+                                }
                             }
                         }
+                        .frame(width: rightColumnWidth)
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, sidePadding)
+                    .offset(y: offsetY)
+                    .opacity(opacity)
                 } else {
                     // Portrait layout - top-aligned, scrollable
                     ScrollView(showsIndicators: false) {
@@ -318,6 +342,8 @@ struct CameraView: View {
                             if !dataStore.savedScans.isEmpty {
                                 recentScansPreview(isLandscape: false)
                                     .id(refreshID) // Force refresh when this ID changes
+                            } else {
+                                howItWorksSection
                             }
                         }
                         .padding(.horizontal, 24)
@@ -477,6 +503,62 @@ struct CameraView: View {
         .accessibilityLabel("Scan scientific poster")
     }
     
+    // "How it works" panel shown before the first scan, so the space beside or
+    // below the scan card isn't left empty
+    private var howItWorksSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("How it works")
+                .font(.title3.bold())
+                .foregroundColor(.primary)
+
+            VStack(spacing: 0) {
+                howItWorksRow(
+                    icon: "camera.viewfinder",
+                    title: "Capture the poster",
+                    detail: "Fit the whole poster in the frame, in good light."
+                )
+                Divider().padding(.leading, 58)
+                howItWorksRow(
+                    icon: "list.bullet.rectangle",
+                    title: "Get the key points",
+                    detail: "PosterLens reads the text and summarizes the findings."
+                )
+                Divider().padding(.leading, 58)
+                howItWorksRow(
+                    icon: "bubble.left.and.text.bubble.right",
+                    title: "Explore further",
+                    detail: "Ask questions, chat, and find related research and future directions."
+                )
+            }
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(14)
+        }
+    }
+
+    private func howItWorksRow(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(DesignSystem.Colors.brandBlue)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.primary)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+    }
+
     // Recent scans preview section - responsive to orientation
     @ViewBuilder
     private func recentScansPreview(isLandscape: Bool) -> some View {
@@ -529,7 +611,6 @@ struct CameraView: View {
         GeometryReader { geometry in
             VStack(alignment: .leading, spacing: 8) {
                 recentSectionHeader
-                    .padding(.horizontal, 24)
 
                 let recentScans = dataStore.savedScans.sorted(by: { $0.date > $1.date }).prefix(4)
                 let itemSize = min(geometry.size.width / 2.2, 160)
@@ -542,7 +623,6 @@ struct CameraView: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
-                .padding(.horizontal, 24)
             }
         }
     }
