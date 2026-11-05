@@ -86,7 +86,7 @@ struct LiteratureContextView: View {
                 .fill(Color(.systemGray6)) // Changed to match the other cards
                 .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 2)
         )
-        .onChange(of: citations) { newCitations in
+        .onChange(of: citations) { _, newCitations in
             // If we just got new citations, expand the view and stop loading
             if newCitations != nil {
                 isGenerating = false

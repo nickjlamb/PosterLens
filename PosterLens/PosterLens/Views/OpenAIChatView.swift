@@ -59,7 +59,7 @@ struct OpenAIChatView: View {
                     let convo = dataStore.getOrCreateConversation(for: posterScan.id)
                     self.conversation = convo
                 }
-                .onChange(of: conversation?.messages.count) { newCount in
+                .onChange(of: conversation?.messages.count) { _, newCount in
                     // Log message count change
                     print("📊 Message count changed to: \(newCount ?? 0)")
                     

@@ -123,7 +123,7 @@ struct ImprovedHistoryView: View {
                             appeared = true
                         }
                     }
-                    .onChange(of: geometry.size.height) { newHeight in
+                    .onChange(of: geometry.size.height) { _, newHeight in
                         viewHeight = newHeight
                     }
                     

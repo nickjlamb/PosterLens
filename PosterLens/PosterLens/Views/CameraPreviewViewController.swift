@@ -395,7 +395,8 @@ class CameraPreviewViewController: UIViewController {
         }
         
         // Only change orientation if it actually changed to avoid unnecessary animations
-        if connection.isVideoOrientationSupported && connection.videoOrientation != videoOrientation {
+        let rotationAngle = Self.rotationAngle(for: videoOrientation)
+        if connection.isVideoRotationAngleSupported(rotationAngle) && connection.videoRotationAngle != rotationAngle {
             // Set up animation before changing orientation
             CATransaction.begin()
             CATransaction.setAnimationDuration(0.3) // Slightly longer for smoother transition
@@ -407,8 +408,8 @@ class CameraPreviewViewController: UIViewController {
                 }
             }
             
-            // Update the connection's orientation
-            connection.videoOrientation = videoOrientation
+            // Update the connection's rotation
+            connection.videoRotationAngle = rotationAngle
             
             // Commit the transaction
             CATransaction.commit()
@@ -448,6 +449,19 @@ class CameraPreviewViewController: UIViewController {
         })
     }
     
+    /// Converts the interface-style orientation into the rotation angle (degrees)
+    /// used by AVCaptureConnection on iOS 17+. The back camera's sensor is landscape,
+    /// so landscapeRight is 0°, portrait 90°, landscapeLeft 180°, upside down 270°.
+    private static func rotationAngle(for orientation: AVCaptureVideoOrientation) -> CGFloat {
+        switch orientation {
+        case .landscapeRight: return 0
+        case .portrait: return 90
+        case .landscapeLeft: return 180
+        case .portraitUpsideDown: return 270
+        @unknown default: return 90
+        }
+    }
+
     /// The window scene this camera is actually displayed in.
     private var hostWindowScene: UIWindowScene? {
         if let scene = view.window?.windowScene { return scene }
@@ -899,8 +913,9 @@ class CameraPreviewViewController: UIViewController {
         
         // Ensure the connection's video orientation is updated before capture
         if let photoOutputConnection = photoOutput.connection(with: .video) {
-            if let previewConnection = previewLayer.connection, photoOutputConnection.isVideoOrientationSupported {
-                photoOutputConnection.videoOrientation = previewConnection.videoOrientation
+            if let previewConnection = previewLayer.connection,
+               photoOutputConnection.isVideoRotationAngleSupported(previewConnection.videoRotationAngle) {
+                photoOutputConnection.videoRotationAngle = previewConnection.videoRotationAngle
             }
         }
         

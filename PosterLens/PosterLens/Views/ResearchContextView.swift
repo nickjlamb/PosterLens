@@ -91,7 +91,7 @@ struct ResearchContextView: View {
                 .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
         )
         .padding(.vertical, 8)
-        .onChange(of: futureDirections) { newValue in
+        .onChange(of: futureDirections) { _, newValue in
             print("Directions changed to: \(String(describing: newValue))")
             if let newDirections = newValue, !newDirections.isEmpty {
                 showingDirections = true

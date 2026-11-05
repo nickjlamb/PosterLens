@@ -49,14 +49,14 @@ struct SimpleChatView: View {
                     }
                     .padding()
                 }
-                .onChange(of: messages.count) { _ in
+                .onChange(of: messages.count) {
                     if let lastMessageId = messages.last?.id {
                         withAnimation {
                             proxy.scrollTo(lastMessageId, anchor: .bottom)
                         }
                     }
                 }
-                .onChange(of: isLoading) { _ in
+                .onChange(of: isLoading) {
                     if isLoading {
                         withAnimation {
                             if let lastView = messages.last?.id {

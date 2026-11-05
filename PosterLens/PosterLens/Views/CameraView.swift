@@ -89,7 +89,7 @@ struct CameraView: View {
                     SummaryView(scan: currentScan)
                 }
             }
-            .onChange(of: viewModel.currentScan) { newScan in
+            .onChange(of: viewModel.currentScan) { _, newScan in
                 // Immediately navigate when a new scan is available
                 if newScan != nil {
                     showingResults = true
@@ -157,7 +157,7 @@ struct CameraView: View {
                 refreshID = UUID()
             }
             // Listen for changes to dataStore.savedScans
-            .onChange(of: dataStore.savedScans.count) { _ in
+            .onChange(of: dataStore.savedScans.count) {
                 // Force refresh of recent scans
                 refreshID = UUID()
             }

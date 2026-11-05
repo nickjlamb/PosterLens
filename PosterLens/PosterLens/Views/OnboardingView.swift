@@ -82,7 +82,7 @@ struct OnboardingView: View {
                     }
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                .onChange(of: currentPage) { _ in
+                .onChange(of: currentPage) {
                     HapticManager.shared.selection()
                 }
 
