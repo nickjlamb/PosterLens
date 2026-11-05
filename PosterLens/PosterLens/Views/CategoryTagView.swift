@@ -34,24 +34,34 @@ struct CategoryTagRow: View {
     var compact: Bool = true
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(categories.prefix(maxVisible)) { category in
-                    CategoryTagView(category: category, compact: compact)
-                }
-
-                // Show "+N" indicator if there are more categories
-                if categories.count > maxVisible {
-                    Text("+\(categories.count - maxVisible)")
-                        .font(.system(size: compact ? 11 : 12, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, compact ? 6 : 8)
-                        .padding(.vertical, compact ? 3 : 5)
-                        .background(Color.gray.opacity(0.7))
-                        .cornerRadius(compact ? 8 : 10)
-                }
+        // Show as many tags as fit on one line, then a "+N" pill for the rest,
+        // so the last tag is never cut off at the edge of the card.
+        let maxCount = max(1, min(maxVisible, categories.count))
+        ViewThatFits(in: .horizontal) {
+            ForEach((1...maxCount).reversed(), id: \.self) { count in
+                row(showing: count)
             }
         }
+    }
+
+    private func row(showing count: Int) -> some View {
+        HStack(spacing: 6) {
+            ForEach(categories.prefix(count)) { category in
+                CategoryTagView(category: category, compact: compact)
+            }
+
+            // Show "+N" indicator if there are more categories
+            if categories.count > count {
+                Text("+\(categories.count - count)")
+                    .font(.system(size: compact ? 11 : 12, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, compact ? 6 : 8)
+                    .padding(.vertical, compact ? 3 : 5)
+                    .background(Color.gray.opacity(0.7))
+                    .cornerRadius(compact ? 8 : 10)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

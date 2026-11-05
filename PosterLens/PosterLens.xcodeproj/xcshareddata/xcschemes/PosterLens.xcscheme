@@ -50,6 +50,12 @@
             ReferencedContainer = "container:PosterLens.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+         <CommandLineArgument
+            argument = "-PLDemoScans YES"
+            isEnabled = "YES">
+         </CommandLineArgument>
+      </CommandLineArguments>
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "PERPLEXITY_API_KEY"

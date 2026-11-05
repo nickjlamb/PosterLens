@@ -13,6 +13,11 @@ struct PosterLensApp: App {
                     .environmentObject(dataStore)
                     .environmentObject(onboardingManager)
                     .onAppear {
+                        #if DEBUG
+                        // Screenshot demo data: launch with -PLDemoScans YES
+                        DemoData.seedIfRequested(dataStore: dataStore, onboarding: onboardingManager)
+                        #endif
+
                         // Check if we need to show onboarding
                         showOnboarding = onboardingManager.showOnboarding
                     }
