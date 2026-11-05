@@ -771,7 +771,7 @@ struct StepIndicatorView: View {
 
 struct RelatedResearchView_Previews: PreviewProvider {
     static var previews: some View {
-        NavigationView {
+        NavigationStack {
             RelatedResearchView(posterScan: PosterScan(
                 title: "Impact of Molecular Pathology Testing on Cancer Treatment Decisions",
                 rawText: "Sample poster text about molecular pathology and cancer research",

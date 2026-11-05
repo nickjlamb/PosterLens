@@ -86,7 +86,7 @@ struct NotesEditorSheet: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             TextEditor(text: $text)
                 .focused($editorFocused)
                 .padding(.horizontal, 12)
@@ -95,7 +95,7 @@ struct NotesEditorSheet: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
+                        Button { dismiss() } label: { Label("Cancel", systemImage: "xmark") }
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         if hasInitialNotes {
@@ -107,9 +107,11 @@ struct NotesEditorSheet: View {
                         }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
+                        Button {
                             onSave(text.trimmingCharacters(in: .whitespacesAndNewlines))
                             dismiss()
+                        } label: {
+                            Label("Save", systemImage: "checkmark")
                         }
                         .fontWeight(.semibold)
                     }

@@ -27,6 +27,16 @@ struct ImprovedHistoryView: View {
     @State private var showingExportSheet = false
     @State private var exportURLs: [URL] = []
     @State private var gridColumns = [GridItem(.flexible(), spacing: 20)]
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    /// Columns actually used for layout. On wide screens (iPad, the unfolded iPhone Duo)
+    /// use an even number of columns so no card sits across the centre of the display
+    /// (the Duo's crease): 1 or 2 -> 2 columns, 3 -> 4 columns.
+    private var effectiveColumns: [GridItem] {
+        guard horizontalSizeClass == .regular else { return gridColumns }
+        let count = gridColumns.count <= 2 ? 2 : 4
+        return Array(repeating: GridItem(.flexible(), spacing: 16), count: count)
+    }
     @State private var isEditMode: EditMode = .inactive
     @State private var viewHeight: CGFloat = 0
 
@@ -57,7 +67,7 @@ struct ImprovedHistoryView: View {
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             GeometryReader { geometry in
                 ZStack(alignment: .bottom) {
                     // Clean white background
@@ -137,12 +147,14 @@ struct ImprovedHistoryView: View {
                 // Leading items (left side)
                 ToolbarItem(placement: .navigationBarLeading) {
                     if isSelectionMode {
-                        Button("Cancel") {
+                        Button {
                             // Exit selection mode
                             withAnimation {
                                 isSelectionMode = false
                                 selectedScanIDs.removeAll()
                             }
+                        } label: {
+                            Label("Cancel", systemImage: "xmark")
                         }
                     } else {
                         EditButton()
@@ -437,11 +449,11 @@ struct ImprovedHistoryView: View {
     }
 
     private var gridView: some View {
-        LazyVGrid(columns: gridColumns, spacing: 16) {
+        LazyVGrid(columns: effectiveColumns, spacing: 16) {
             ForEach(Array(displayedScans.enumerated()), id: \.element.id) { index, scan in
                 if isEditMode.isEditing && !isSelectionMode {
                     // Edit mode for deletion (original functionality)
-                    ScanCardView(scan: scan, isHorizontal: gridColumns.count == 1)
+                    ScanCardView(scan: scan, isHorizontal: effectiveColumns.count == 1)
                         .overlay(
                             deleteButton(for: scan),
                             alignment: .topTrailing
@@ -463,7 +475,7 @@ struct ImprovedHistoryView: View {
                         onSelect: { isSelected in
                             handleSelection(scan: scan, isSelected: isSelected)
                         },
-                        isHorizontal: gridColumns.count == 1
+                        isHorizontal: effectiveColumns.count == 1
                     )
                     // Apply staggered entry animation
                     .offset(y: appeared ? 0 : 20)
@@ -547,11 +559,11 @@ struct ImprovedHistoryView: View {
         let rowsCanFit = Int((availableHeight + verticalSpacing) / (cardHeight + verticalSpacing))
         
         // Calculate total cards that can fit
-        let totalCardsCanFit = rowsCanFit * gridColumns.count
+        let totalCardsCanFit = rowsCanFit * effectiveColumns.count
         
         // Calculate how many placeholders we need
         let existingCards = dataStore.savedScans.count
-        let placeholdersNeeded = max(gridColumns.count, totalCardsCanFit - existingCards)
+        let placeholdersNeeded = max(effectiveColumns.count, totalCardsCanFit - existingCards)
         
         return placeholdersNeeded
     }
@@ -613,7 +625,7 @@ struct ImprovedHistoryView: View {
             Spacer()
             
             // Visual guide for where scans will appear - fill the screen with placeholders
-            LazyVGrid(columns: gridColumns, spacing: 16) {
+            LazyVGrid(columns: effectiveColumns, spacing: 16) {
                 ForEach(0..<calculateEmptyStatePlaceholderCount(), id: \.self) { index in
                     PlaceholderCardView(onTap: {
                         // First switch to camera tab
@@ -657,7 +669,7 @@ struct ImprovedHistoryView: View {
         let rowsCanFit = max(2, Int((availableHeight + verticalSpacing) / (cardHeight + verticalSpacing)))
         
         // Calculate total cards that can fit
-        let totalCardsCanFit = rowsCanFit * gridColumns.count
+        let totalCardsCanFit = rowsCanFit * effectiveColumns.count
         
         return totalCardsCanFit
     }

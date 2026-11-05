@@ -173,9 +173,11 @@ struct CameraView: View {
     
     // Loading View with animated elements - responsive to orientation
     private var loadingView: some View {
-        Group {
-            // Detect orientation using UIDevice instead of GeometryReader
-            if UIDevice.current.orientation.isLandscape {
+        GeometryReader { geometry in
+            Group {
+            // Choose the layout from the space available (works for Split View and
+            // iPhone Duo, where device orientation doesn't match the window shape)
+            if geometry.size.width > geometry.size.height {
                 // Landscape layout - use horizontal arrangement
                 HStack(spacing: 30) {
                     // Left side - loading animation
@@ -271,6 +273,8 @@ struct CameraView: View {
                 }
                 .padding()
             }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
     }
     

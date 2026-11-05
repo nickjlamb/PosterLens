@@ -7,7 +7,7 @@ struct OpenAIConfigView: View {
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 Section(header: Text("API Configuration")) {
                     SecureField("OpenAI API Key", text: $tempAPIKey)
@@ -79,9 +79,15 @@ struct OpenAIConfigView: View {
                 }
             }
             .navigationTitle("OpenAI Configuration")
-            .navigationBarItems(trailing: Button("Done") {
-                presentationMode.wrappedValue.dismiss()
-            })
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        presentationMode.wrappedValue.dismiss()
+                    } label: {
+                        Label("Done", systemImage: "checkmark")
+                    }
+                }
+            }
         }
     }
 }

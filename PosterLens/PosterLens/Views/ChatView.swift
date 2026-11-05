@@ -383,7 +383,7 @@ struct LoadingBubble: View {
 
 struct ChatView_Previews: PreviewProvider {
     static var previews: some View {
-        NavigationView {
+        NavigationStack {
             // Create a sample poster scan for preview
             ChatView(posterScan: PosterScan(
                 title: "Example Poster: Effects of Climate Change on Marine Ecosystems",

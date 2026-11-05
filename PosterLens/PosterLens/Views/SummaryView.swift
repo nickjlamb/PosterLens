@@ -469,13 +469,12 @@ struct SummaryView: View {
             }
         }
         .sheet(isPresented: $showHistory) {
-            NavigationView {
-                ImprovedHistoryView()
-                    .environmentObject(dataStore)
-            }
+            // ImprovedHistoryView provides its own NavigationStack
+            ImprovedHistoryView()
+                .environmentObject(dataStore)
         }
         .sheet(isPresented: $showChat) {
-            NavigationView {
+            NavigationStack {
                 SimpleChatView(posterScan: scan)
                     .environmentObject(dataStore)
             }
@@ -555,7 +554,7 @@ struct SummaryView: View {
 
 struct SummaryView_Previews: PreviewProvider {
     static var previews: some View {
-        NavigationView {
+        NavigationStack {
             SummaryView(scan: PosterScan(
                 title: "Example Poster",
                 rawText: "This is the raw text of the poster.",

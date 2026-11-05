@@ -136,7 +136,7 @@ class CameraPreviewViewController: UIViewController {
             } else if !isCameraBeingSetup {
                 print("Starting capture session from viewWillAppear because it exists but isn't running")
                 // Start the session directly
-                DispatchQueue.global(qos: .userInitiated).async {
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     captureSession.startRunning()
                     print("Capture session started from viewWillAppear")
                     
@@ -201,7 +201,7 @@ class CameraPreviewViewController: UIViewController {
             self.isCameraReady = false
             
             // Use a dedicated background queue for camera operations
-            DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 // Important: Make sure we're not in the middle of configuration
                 // when calling startRunning
                 captureSession.startRunning()
@@ -340,8 +340,10 @@ class CameraPreviewViewController: UIViewController {
         // First check the interface orientation which is more stable during transitions
         let videoOrientation: AVCaptureVideoOrientation
         
-        // Get the current interface orientation first (more reliable for UI)
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+        // Get the current interface orientation first (more reliable for UI).
+        // Use this view's own scene, not the first connected one (matters in Split View
+        // and on iPhone Duo, where several scenes can be connected).
+        if let windowScene = hostWindowScene {
             let interfaceOrientation = windowScene.interfaceOrientation
             
             switch interfaceOrientation {
@@ -446,6 +448,24 @@ class CameraPreviewViewController: UIViewController {
         })
     }
     
+    /// The window scene this camera is actually displayed in.
+    private var hostWindowScene: UIWindowScene? {
+        if let scene = view.window?.windowScene { return scene }
+        return UIApplication.shared.connectedScenes
+            .filter { $0.activationState == .foregroundActive }
+            .compactMap { $0 as? UIWindowScene }
+            .first
+    }
+
+    /// Whether the controls should use the side-rail ("landscape") layout.
+    /// Based on the space we have, not on how the device is held: on iPhone Duo the
+    /// unfolded inner display can be wide while the device still reports portrait.
+    private var usesWideControlLayout: Bool {
+        let size = view.bounds.size
+        guard size.width > 0, size.height > 0 else { return false }
+        return size.width > size.height
+    }
+
     // Store constraints to be able to activate/deactivate them
     private var portraitConstraints: [NSLayoutConstraint] = []
     private var landscapeConstraints: [NSLayoutConstraint] = []
@@ -476,11 +496,8 @@ class CameraPreviewViewController: UIViewController {
             constraint.priority = .defaultHigh
         }
         
-        // Get the current device orientation
-        let currentOrientation = UIDevice.current.orientation
-        
-        // Activate the appropriate constraints based on current orientation
-        if currentOrientation.isLandscape {
+        // Activate the appropriate constraints based on the available space
+        if usesWideControlLayout {
             NSLayoutConstraint.activate(landscapeConstraints)
         } else {
             NSLayoutConstraint.activate(portraitConstraints)
@@ -488,18 +505,8 @@ class CameraPreviewViewController: UIViewController {
     }
     
     private func layoutCameraControls() {
-        // First try to get the interface orientation
-        var isLandscape = false
-        
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            isLandscape = windowScene.interfaceOrientation.isLandscape
-        } else {
-            // Fall back to device orientation if interface orientation is not available
-            let deviceOrientation = UIDevice.current.orientation
-            // Only modify layout for valid orientations
-            guard deviceOrientation.isValidInterfaceOrientation else { return }
-            isLandscape = deviceOrientation.isLandscape
-        }
+        // Choose the layout from the space available, not the device orientation
+        let isLandscape = usesWideControlLayout
         
         // Only adjust controls if our constraints are initialized
         if !portraitConstraints.isEmpty && !landscapeConstraints.isEmpty {
@@ -663,7 +670,7 @@ class CameraPreviewViewController: UIViewController {
                 // to avoid timing issues with the isCameraBeingSetup flag
                 print("Starting capture session directly from setup method")
                 if let captureSession = self.captureSession, !captureSession.isRunning {
-                    DispatchQueue.global(qos: .userInitiated).async {
+                    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                         captureSession.startRunning()
                         print("Capture session started directly")
                         

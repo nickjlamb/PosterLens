@@ -380,7 +380,7 @@ struct LoadingAnimation: View {
 
 struct SimpleChatView_Previews: PreviewProvider {
     static var previews: some View {
-        NavigationView {
+        NavigationStack {
             SimpleChatView(posterScan: PosterScan(
                 title: "Example Poster: Effects of Climate Change on Marine Ecosystems",
                 rawText: "This is a sample poster about marine ecosystems and climate change impacts. It includes methodology, results, and conclusions.",

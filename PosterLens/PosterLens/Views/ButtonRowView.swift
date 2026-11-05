@@ -244,15 +244,17 @@ struct ButtonRowView: View {
         )
         .padding(.vertical, 8)
         .sheet(isPresented: $showQuestionsView) {
-            NavigationView {
+            NavigationStack {
                 if let questions = scan.authorQuestions ?? self.questions {
                     QuestionListView(questions: questions)
                         .navigationTitle("Questions to Ask the Author")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") {
+                                Button {
                                     showQuestionsView = false
+                                } label: {
+                                    Label("Done", systemImage: "checkmark")
                                 }
                             }
                         }
@@ -264,8 +266,10 @@ struct ButtonRowView: View {
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") {
+                                Button {
                                     showQuestionsView = false
+                                } label: {
+                                    Label("Done", systemImage: "checkmark")
                                 }
                             }
                         }
@@ -273,7 +277,7 @@ struct ButtonRowView: View {
             }
         }
         .sheet(isPresented: $showDirectionsView) {
-            NavigationView {
+            NavigationStack {
                 if let directions = scan.researchContext?.futureDirections ?? self.directions {
                     ResearchDirectionsView(directions: directions)
                         .navigationTitle("Research Directions")
@@ -281,8 +285,10 @@ struct ButtonRowView: View {
                         .padding()
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") {
+                                Button {
                                     showDirectionsView = false
+                                } label: {
+                                    Label("Done", systemImage: "checkmark")
                                 }
                             }
                         }
@@ -294,8 +300,10 @@ struct ButtonRowView: View {
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Done") {
+                                Button {
                                     showDirectionsView = false
+                                } label: {
+                                    Label("Done", systemImage: "checkmark")
                                 }
                             }
                         }
@@ -303,26 +311,30 @@ struct ButtonRowView: View {
             }
         }
         .sheet(isPresented: $showOpenAIChatView) {
-            NavigationView {
+            NavigationStack {
                 OpenAIChatView(posterScan: scan)
                     .environmentObject(dataStore)
                     .toolbar {
                         ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Done") {
+                            Button {
                                 showOpenAIChatView = false
+                            } label: {
+                                Label("Done", systemImage: "checkmark")
                             }
                         }
                     }
             }
         }
         .sheet(isPresented: $showRelatedResearchView) {
-            NavigationView {
+            NavigationStack {
                 RelatedResearchView(posterScan: scan)
                     .environmentObject(dataStore)
                     .toolbar {
                         ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Done") {
+                            Button {
                                 showRelatedResearchView = false
+                            } label: {
+                                Label("Done", systemImage: "checkmark")
                             }
                         }
                     }

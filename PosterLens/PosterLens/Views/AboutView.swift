@@ -58,7 +58,7 @@ struct AboutView: View {
     
     // Break up the body into smaller views to help compiler
     private var aboutContent: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 backgroundView
                 
