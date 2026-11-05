@@ -164,21 +164,23 @@ struct RelatedResearchView: View {
         dotOpacities = [0.3, 0.3, 0.3]
         
         Task {
-            // Start advancing the step indicator
-            await advanceStepIndicator()
-            
+            // Advance the step indicator alongside the search (not before it):
+            // previously the search only started after ~15 s of indicator delays.
+            let stepIndicatorTask = Task { await advanceStepIndicator() }
+
             do {
                 // Use the unified method that routes through RAG or Perplexity based on FeatureFlags
                 // RAG pipeline: BigQuery + Vertex AI embeddings (when enabled)
                 // Perplexity fallback: Search API with PubMed enrichment
                 let papers = try await relatedResearchService.findRelatedResearchUnified(from: posterScan, skipEnrichment: false)
-                
+                stepIndicatorTask.cancel()
+
                 await MainActor.run {
                     // Ensure the animation completes
                     searchStepIndex = 4
 
-                    // Delay to ensure the final step is visible for sufficient time
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    // Brief pause so the final step registers before results appear
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         isSearching = false
                         relatedPapers = papers
 
@@ -190,6 +192,7 @@ struct RelatedResearchView: View {
                     }
                 }
             } catch {
+                stepIndicatorTask.cancel()
                 await MainActor.run {
                     isSearching = false
                     errorMessage = "Failed to find related papers: \(error.localizedDescription)"
@@ -207,23 +210,22 @@ struct RelatedResearchView: View {
     
     // Helper function to advance the step indicator asynchronously
     private func advanceStepIndicator() async {
-        // NEW TIMING: Account for Perplexity Search + PubMed enrichment (~15-20 seconds total)
-        try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds - Perplexity search
-
-        await MainActor.run {
-            searchStepIndex = 2
-        }
-
-        try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds - parsing results
-
-        await MainActor.run {
-            searchStepIndex = 3
-        }
-
-        try? await Task.sleep(nanoseconds: 8_000_000_000) // 8 seconds - PubMed enrichment (faster now with PMIDs)
-
-        await MainActor.run {
-            searchStepIndex = 4
+        // Cosmetic progress only: runs in parallel with the real search and is
+        // cancelled as soon as results arrive, so it never delays them.
+        let stepDelays: [(step: Int, nanoseconds: UInt64)] = [
+            (2, 1_500_000_000),  // after 1.5 s
+            (3, 1_500_000_000),  // after 3 s
+            (4, 2_000_000_000)   // after 5 s
+        ]
+        for (step, delay) in stepDelays {
+            do {
+                try await Task.sleep(nanoseconds: delay)
+            } catch {
+                return // cancelled: the search has finished
+            }
+            await MainActor.run {
+                searchStepIndex = step
+            }
         }
 
         // The final step will remain visible until the search completes naturally

@@ -55,6 +55,7 @@ struct SummaryView: View {
     @State private var categoryGenMessage: String? = nil
     @State private var isGeneratingSummary = false
     @State private var summaryGenFailed = false
+    @State private var summaryGenOffline = false
     @State private var showingShareSheet = false
 
     private let openAIService = OpenAIService()
@@ -74,7 +75,9 @@ struct SummaryView: View {
     private var summaryRetryCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: summaryGenFailed ? "wifi.exclamationmark" : "doc.text.magnifyingglass")
+                Image(systemName: summaryGenFailed
+                      ? (summaryGenOffline ? "wifi.exclamationmark" : "exclamationmark.triangle")
+                      : "doc.text.magnifyingglass")
                     .font(.title2)
                     .foregroundColor(summaryGenFailed ? .orange : DesignSystem.Colors.brandBlue)
 
@@ -83,7 +86,9 @@ struct SummaryView: View {
                         .font(.headline)
                         .foregroundColor(.primary)
                     Text(summaryGenFailed
-                         ? "Still couldn't connect. Check your connection and try again."
+                         ? (summaryGenOffline
+                            ? "Still couldn't connect. Check your connection and try again."
+                            : "Couldn't generate the summary right now. Please try again in a moment.")
                          : "Your scan is saved. It looks like the summary couldn't be generated — you may have been offline.")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
@@ -153,9 +158,16 @@ struct SummaryView: View {
                             }
                         }
                     }
-                case .failure:
+                case .failure(let error):
                     isGeneratingSummary = false
                     summaryGenFailed = true
+                    // Only blame the connection when it really was the connection
+                    switch error as? NetworkError {
+                    case .noInternetConnection, .connectionTimeout, .serverUnreachable:
+                        summaryGenOffline = true
+                    default:
+                        summaryGenOffline = false
+                    }
                     HapticManager.shared.error()
                 }
             }

@@ -75,13 +75,16 @@ class OpenAIService {
 
         // Create the request body
         let requestBody: [String: Any] = [
-            "model": "gpt-3.5-turbo", // Using GPT-3.5 Turbo for better cost efficiency
+            // gpt-3.5-turbo was shut down on 23 Oct 2026; gpt-5.6-terra is OpenAI's named replacement
+            "model": "gpt-5.6-terra",
             "messages": [
                 ["role": "system", "content": "You are a helpful scientific assistant that specializes in answering questions about scientific posters. You provide clear, concise, and accurate information based on the poster's content."],
                 ["role": "user", "content": prompt]
             ],
-            "max_tokens": 1024,
-            "temperature": 0.3 // Lower temperature for more focused, factual responses
+            // Newer models take max_completion_tokens (which also covers reasoning tokens)
+            // and don't accept a custom temperature when reasoning is on.
+            "max_completion_tokens": 4096,
+            "reasoning_effort": "low" // Summaries don't need deep reasoning; keeps cost and latency down
         ]
 
         print("🚀 Using OpenAI API key: \(apiKey.prefix(8))...") // Only log prefix for security
@@ -92,7 +95,7 @@ class OpenAIService {
             request.httpBody = requestData
 
             // Debug logging - print request without sensitive data
-            print("📤 API Request sent to OpenAI - model: gpt-3.5-turbo, max_tokens: 1024")
+            print("📤 API Request sent to OpenAI - model: gpt-5.6-terra, max_completion_tokens: 4096")
         } catch {
             print("❌ Serialization error: \(error.localizedDescription)")
             completion(.failure(NetworkError.malformedData))
