@@ -156,7 +156,13 @@ enum DemoData {
         let size = CGSize(width: 1200, height: 1600)
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { ctx in
-            let cg = ctx.cgContext
+            drawPoster(in: ctx.cgContext, size: size, title: title, accent: accent, seed: seed)
+        }
+    }
+
+    // Kept out of the image closure, with explicit types, so the compiler
+    // type-checks it quickly (CI failed with "unable to type-check in reasonable time").
+    private static func drawPoster(in cg: CGContext, size: CGSize, title: String, accent: UIColor, seed: Int) {
             UIColor(white: 0.98, alpha: 1).setFill()
             cg.fill(CGRect(origin: .zero, size: size))
 
@@ -179,16 +185,16 @@ enum DemoData {
             let columnWidth: CGFloat = 340
             let gap: CGFloat = 45
             for column in 0..<3 {
-                let x = 60 + CGFloat(column) * (columnWidth + gap)
+                let x: CGFloat = 60 + CGFloat(column) * (columnWidth + gap)
                 var y: CGFloat = 350
                 for section in 0..<2 {
                     accent.withAlphaComponent(0.9).setFill()
                     cg.fill(CGRect(x: x, y: y, width: 180, height: 26))
                     y += 50
                     UIColor(white: 0.72, alpha: 1).setFill()
-                    let lines = 7 + (column + section + seed) % 3
+                    let lines: Int = 7 + (column + section + seed) % 3
                     for line in 0..<lines {
-                        let width = line == lines - 1 ? columnWidth * 0.6 : columnWidth
+                        let width: CGFloat = (line == lines - 1) ? columnWidth * 0.6 : columnWidth
                         cg.fill(CGRect(x: x, y: y, width: width, height: 12))
                         y += 26
                     }
@@ -203,18 +209,21 @@ enum DemoData {
                         cg.stroke(chart, width: 2)
                         if (column + seed) % 2 == 0 {
                             for bar in 0..<5 {
-                                let h = CGFloat(60 + ((bar * 37 + seed * 23 + column * 11) % 140))
-                                accent.withAlphaComponent(0.35 + 0.12 * CGFloat(bar)).setFill()
-                                cg.fill(CGRect(x: chart.minX + 25 + CGFloat(bar) * 62,
-                                               y: chart.maxY - 20 - h, width: 40, height: h))
+                                let barSeed: Int = bar * 37 + seed * 23 + column * 11
+                                let h: CGFloat = CGFloat(60 + barSeed % 140)
+                                let barX: CGFloat = chart.minX + 25 + CGFloat(bar) * 62
+                                let alpha: CGFloat = 0.35 + 0.12 * CGFloat(bar)
+                                accent.withAlphaComponent(alpha).setFill()
+                                cg.fill(CGRect(x: barX, y: chart.maxY - 20 - h, width: 40, height: h))
                             }
                         } else {
                             accent.setStroke()
                             cg.setLineWidth(6)
                             cg.move(to: CGPoint(x: chart.minX + 20, y: chart.maxY - 40))
                             for point in 1...6 {
-                                let px = chart.minX + 20 + CGFloat(point) * 50
-                                let py = chart.maxY - 40 - CGFloat((point * 29 + seed * 17) % 150)
+                                let lineSeed: Int = point * 29 + seed * 17
+                                let px: CGFloat = chart.minX + 20 + CGFloat(point) * 50
+                                let py: CGFloat = chart.maxY - 40 - CGFloat(lineSeed % 150)
                                 cg.addLine(to: CGPoint(x: px, y: py))
                             }
                             cg.strokePath()
@@ -227,7 +236,6 @@ enum DemoData {
             // Footer band
             accent.withAlphaComponent(0.15).setFill()
             cg.fill(CGRect(x: 0, y: size.height - 90, width: size.width, height: 90))
-        }
     }
 }
 #endif
